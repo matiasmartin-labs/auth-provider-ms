@@ -9,5 +9,6 @@ func main() {
 	pkg.NewApplication().
 		UseConfig().
 		UseServer().
+		UseServerSecurity().
 		Run(server.Routes)
 }

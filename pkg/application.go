@@ -39,6 +39,11 @@ func (app *Application) UseServer() *Application {
 	return app
 }
 
+func (app *Application) UseServerSecurity() *Application {
+	GenerateKeyPair()
+	return app
+}
+
 func (app *Application) Run(entryPoint EntryPointFunc) error {
 	err := entryPoint(app)
 	if err != nil {
