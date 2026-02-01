@@ -1,0 +1,5 @@
+server:
+  port: 8080
+  read-timeout: 10s
+  write-timeout: 10s
+  max-header-bytes: 1048576
