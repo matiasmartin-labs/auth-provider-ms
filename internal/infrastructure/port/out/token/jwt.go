@@ -10,14 +10,6 @@ import (
 	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 )
 
-type claims struct {
-	Roles   []string
-	Name    string
-	Email   string
-	Picture string
-	jwt.RegisteredClaims
-}
-
 type JwtGenerator struct{}
 
 func NewJwtGenerator() ports.TokenGenerator {
@@ -27,7 +19,7 @@ func NewJwtGenerator() ports.TokenGenerator {
 func (jg *JwtGenerator) GenerateToken(userInfo *model.UserInfo) (string, error) {
 	privateKey := pkg.App.KeyPair.GetPrivateKey()
 	jwtConfig := pkg.App.Config.GetSecurityConfig().GetJWTConfig()
-	claims := claims{
+	claims := pkg.Claims{
 		Roles:   []string{"USER"},
 		Name:    userInfo.GetFullName(),
 		Email:   userInfo.Email,

@@ -5,6 +5,8 @@ server:
   max-header-bytes: 1048576
 
 security:
+  auth:
+    enabled: true
   redirect:
     enabled: false
     url: http://localhost:5173

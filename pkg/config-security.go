@@ -144,12 +144,25 @@ func (o *oAuth2Config) GetGoogleConfig() OAuth2ClientConfig {
 	return config
 }
 
+type AuthConfig interface {
+	IsEnabled() bool
+}
+
+type authConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
+func (a *authConfig) IsEnabled() bool {
+	return a.Enabled
+}
+
 type SecurityConfig interface {
 	GetOAuth2Config() OAuth2Config
 	GetRedirectConfig() RedirectConfig
 	GetCookieConfig() CookieConfig
 	GetLoginConfig() LoginConfig
 	GetJWTConfig() JWTConfig
+	GetAuthConfig() AuthConfig
 }
 
 type securityConfig struct {
@@ -158,6 +171,7 @@ type securityConfig struct {
 	Cookie   *cookieConfig   `mapstructure:"cookie"`
 	Login    *loginConfig    `mapstructure:"login"`
 	JWT      *jwtConfig      `mapstructure:"jwt"`
+	Auth     *authConfig     `mapstructure:"auth"`
 }
 
 func (s *securityConfig) GetOAuth2Config() OAuth2Config {
@@ -178,4 +192,8 @@ func (s *securityConfig) GetLoginConfig() LoginConfig {
 
 func (s *securityConfig) GetJWTConfig() JWTConfig {
 	return s.JWT
+}
+
+func (s *securityConfig) GetAuthConfig() AuthConfig {
+	return s.Auth
 }

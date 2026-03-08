@@ -47,6 +47,10 @@ func (app *Application) RegisterGET(path string, handler gin.HandlerFunc) {
 	app.handler.GET(path, handler)
 }
 
+func (app *Application) RegisterProtectedGET(path string, handler gin.HandlerFunc) {
+	app.handler.GET(path, app.AuthMiddleware(), handler)
+}
+
 func (app *Application) Run(entryPoint EntryPointFunc) error {
 	err := entryPoint(app)
 	if err != nil {
