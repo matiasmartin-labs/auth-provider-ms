@@ -28,6 +28,7 @@ func (jg *JwtGenerator) GenerateToken(userInfo *model.UserInfo) (string, error) 
 			ID:        uuid.NewString(),
 			Issuer:    jwtConfig.GetIssuer(),
 			Subject:   userInfo.Email,
+			Audience:  jwt.ClaimStrings{jwtConfig.GetAudience()},
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(jwtConfig.GetExpirationTime())),
 		},

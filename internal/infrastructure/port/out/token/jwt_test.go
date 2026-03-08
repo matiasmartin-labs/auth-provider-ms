@@ -218,3 +218,145 @@ func TestJwtGenerator_GenerateToken_FullName(t *testing.T) {
 		assert.Equal(t, tc.expectedName, parsedClaims.Name)
 	}
 }
+
+func TestJwtGenerator_GenerateToken_ContainsAudience(t *testing.T) {
+	privateKey := setupMockApp()
+
+	generator := NewJwtGenerator()
+
+	userInfo := &model.UserInfo{
+		Email:     "test@example.com",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+
+	token, err := generator.GenerateToken(userInfo)
+	require.NoError(t, err)
+
+	parsedToken, err := jwt.ParseWithClaims(token, &pkg.Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return &privateKey.PublicKey, nil
+	})
+
+	require.NoError(t, err)
+
+	parsedClaims := parsedToken.Claims.(*pkg.Claims)
+
+	require.NotNil(t, parsedClaims.Audience)
+	assert.Len(t, parsedClaims.Audience, 1)
+	assert.Equal(t, "test-audience", parsedClaims.Audience[0])
+}
+
+func TestJwtGenerator_GenerateToken_ValidatableByMiddleware(t *testing.T) {
+	privateKey := setupMockApp()
+
+	generator := NewJwtGenerator()
+
+	userInfo := &model.UserInfo{
+		Email:     "test@example.com",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+
+	token, err := generator.GenerateToken(userInfo)
+	require.NoError(t, err)
+
+	_, err = jwt.ParseWithClaims(token, &pkg.Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return &privateKey.PublicKey, nil
+	},
+		jwt.WithIssuer("test-issuer"),
+		jwt.WithAudience("test-audience"),
+		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Name}),
+	)
+
+	assert.NoError(t, err)
+}
+
+func TestJwtGenerator_GenerateToken_FailsValidationWithWrongIssuer(t *testing.T) {
+	privateKey := setupMockApp()
+
+	generator := NewJwtGenerator()
+
+	userInfo := &model.UserInfo{
+		Email:     "test@example.com",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+
+	token, err := generator.GenerateToken(userInfo)
+	require.NoError(t, err)
+
+	_, err = jwt.ParseWithClaims(token, &pkg.Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return &privateKey.PublicKey, nil
+	},
+		jwt.WithIssuer("wrong-issuer"),
+		jwt.WithAudience("test-audience"),
+	)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "issuer")
+}
+
+func TestJwtGenerator_GenerateToken_FailsValidationWithWrongAudience(t *testing.T) {
+	privateKey := setupMockApp()
+
+	generator := NewJwtGenerator()
+
+	userInfo := &model.UserInfo{
+		Email:     "test@example.com",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+
+	token, err := generator.GenerateToken(userInfo)
+	require.NoError(t, err)
+
+	_, err = jwt.ParseWithClaims(token, &pkg.Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return &privateKey.PublicKey, nil
+	},
+		jwt.WithIssuer("test-issuer"),
+		jwt.WithAudience("wrong-audience"),
+	)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "audience")
+}
+
+func TestJwtGenerator_GenerateToken_FailsValidationWithMissingAudience(t *testing.T) {
+	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+
+	pkg.App = &pkg.Application{
+		Config: &mockConfiguration{
+			securityConfig: &mockSecurityConfig{
+				jwtConfig: &mockJWTConfig{
+					issuer:         "test-issuer",
+					audience:       "",
+					expirationTime: time.Hour,
+				},
+			},
+		},
+		KeyPair: &mockKeyPair{privateKey: privateKey},
+	}
+
+	generator := NewJwtGenerator()
+
+	userInfo := &model.UserInfo{
+		Email:     "test@example.com",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+
+	token, err := generator.GenerateToken(userInfo)
+	require.NoError(t, err)
+
+	_, err = jwt.ParseWithClaims(token, &pkg.Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return &privateKey.PublicKey, nil
+	},
+		jwt.WithIssuer("test-issuer"),
+		jwt.WithAudience("expected-audience"),
+	)
+
+	assert.Error(t, err)
+}
