@@ -20,7 +20,6 @@ func init() {
 func TestMeHandler_Success(t *testing.T) {
 	router := gin.New()
 	router.GET("/me", func(c *gin.Context) {
-		// Simular que el middleware ya agregó los claims
 		claims := &pkg.Claims{
 			Email:   "test@example.com",
 			Name:    "Test User",
@@ -66,7 +65,6 @@ func TestMeHandler_NoClaims(t *testing.T) {
 func TestMeHandler_InvalidClaimsFormat(t *testing.T) {
 	router := gin.New()
 	router.GET("/me", func(c *gin.Context) {
-		// Simular claims con formato incorrecto
 		c.Set("claims", "invalid-claims-format")
 		c.Next()
 	}, MeHandler)
@@ -122,7 +120,6 @@ func TestMeResponse_JSONStructure(t *testing.T) {
 	err = json.Unmarshal(jsonData, &parsed)
 	require.NoError(t, err)
 
-	// Verificar que solo hay 3 campos
 	assert.Len(t, parsed, 3)
 	assert.Contains(t, parsed, "email")
 	assert.Contains(t, parsed, "name")

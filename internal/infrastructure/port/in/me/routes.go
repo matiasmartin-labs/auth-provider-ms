@@ -7,14 +7,12 @@ import (
 	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 )
 
-// MeResponse representa la respuesta del endpoint /auth/me
 type MeResponse struct {
 	Email   string `json:"email"`
 	Name    string `json:"name"`
 	Picture string `json:"picture"`
 }
 
-// MeHandler retorna la información del usuario autenticado
 func MeHandler(ctx *gin.Context) {
 	claimsValue, exists := ctx.Get("claims")
 	if !exists {
