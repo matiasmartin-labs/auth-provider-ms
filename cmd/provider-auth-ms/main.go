@@ -10,5 +10,6 @@ func main() {
 		UseConfig().
 		UseServer().
 		UseServerSecurity().
+		UseGoogleProvider().
 		Run(server.Routes)
 }

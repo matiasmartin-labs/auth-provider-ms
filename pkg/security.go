@@ -9,8 +9,15 @@ import (
 	"github.com/lestrrat-go/jwx/jwk"
 )
 
+func (app *Application) UseServerSecurity() *Application {
+	kp, _ := generateKeyPair()
+	app.KeyPair = kp
+	return app
+}
+
 type KeyPair interface {
 	PublicJWK() (map[string]interface{}, error)
+	GetPrivateKey() *rsa.PrivateKey
 }
 
 type keyPair struct {
@@ -30,20 +37,20 @@ func (kp *keyPair) PublicJWK() (map[string]interface{}, error) {
 	return key.AsMap(context.Background())
 }
 
-var KeyPairHolder KeyPair
+func (kp *keyPair) GetPrivateKey() *rsa.PrivateKey {
+	return kp.PrivateKey
+}
 
-func GenerateKeyPair() error {
+func generateKeyPair() (KeyPair, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	publicKey := &privateKey.PublicKey
 
-	KeyPairHolder = &keyPair{
+	return &keyPair{
 		PrivateKey: privateKey,
 		PublicKey:  publicKey,
 		KeyID:      uuid.New().String(),
-	}
-
-	return nil
+	}, nil
 }

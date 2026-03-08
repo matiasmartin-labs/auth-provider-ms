@@ -7,7 +7,7 @@ import (
 
 func JwksHandler(ctx *gin.Context) {
 
-	publicJwk, err := pkg.KeyPairHolder.PublicJWK()
+	publicJwk, err := pkg.App.KeyPair.PublicJWK()
 	if err != nil {
 		ctx.JSON(500, gin.H{
 			"error": "failed to get public JWK",

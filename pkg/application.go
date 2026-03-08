@@ -12,11 +12,15 @@ type EntryPointFunc func(*Application) error
 type Application struct {
 	Config  Configuration
 	Server  http.Server
-	Handler *gin.Engine
+	handler *gin.Engine
+	KeyPair KeyPair
 }
 
+var App *Application
+
 func NewApplication() *Application {
-	return &Application{}
+	App = &Application{}
+	return App
 }
 
 func (app *Application) UseConfig() *Application {
@@ -27,7 +31,7 @@ func (app *Application) UseConfig() *Application {
 func (app *Application) UseServer() *Application {
 	serverProps := app.Config.GetServerConfig()
 	r := gin.Default()
-	app.Handler = r
+	app.handler = r
 
 	app.Server = http.Server{
 		Addr:           fmt.Sprintf(":%d", serverProps.GetPort()),
@@ -39,9 +43,8 @@ func (app *Application) UseServer() *Application {
 	return app
 }
 
-func (app *Application) UseServerSecurity() *Application {
-	GenerateKeyPair()
-	return app
+func (app *Application) RegisterGET(path string, handler gin.HandlerFunc) {
+	app.handler.GET(path, handler)
 }
 
 func (app *Application) Run(entryPoint EntryPointFunc) error {
