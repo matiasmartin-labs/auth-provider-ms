@@ -102,7 +102,7 @@ func TestApplication_UseServer(t *testing.T) {
 	result := app.UseServer()
 
 	assert.Same(t, app, result) // Returns same instance for chaining
-	assert.NotNil(t, app.Server)
+	assert.NotNil(t, app.Server.Handler)
 	assert.Equal(t, ":8080", app.Server.Addr)
 	assert.Equal(t, 10*time.Second, app.Server.ReadTimeout)
 	assert.Equal(t, 15*time.Second, app.Server.WriteTimeout)

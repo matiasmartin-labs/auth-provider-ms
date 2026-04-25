@@ -216,28 +216,51 @@ func TestGoogleCallbackHandler_ProviderError(t *testing.T) {
 }
 
 func TestGoogleCallbackHandler_EmailNotAllowed(t *testing.T) {
-	setupMockApp("valid-state", []string{"allowed@example.com"}, false, "")
-
-	mockProvider := &mockProviderRepository{
-		userInfo: &model.UserInfo{
-			Email:     "notallowed@example.com",
-			FirstName: "Test",
-			LastName:  "User",
+	testCases := []struct {
+		name            string
+		redirectEnabled bool
+		redirectURL     string
+	}{
+		{
+			name:            "without redirect",
+			redirectEnabled: false,
+			redirectURL:     "",
 		},
-		err: nil,
+		{
+			name:            "with redirect configured",
+			redirectEnabled: true,
+			redirectURL:     "http://localhost:3000/dashboard",
+		},
 	}
-	handler := NewGoogleOAuth2Handler(mockProvider, &mockTokenGenerator{})
 
-	router := gin.New()
-	router.GET("/callback", handler.GoogleCallbackHandler)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockApp("valid-state", []string{"allowed@example.com"}, tc.redirectEnabled, tc.redirectURL)
 
-	req := httptest.NewRequest(http.MethodGet, "/callback?state=valid-state&code=test-code", nil)
-	w := httptest.NewRecorder()
+			mockProvider := &mockProviderRepository{
+				userInfo: &model.UserInfo{
+					Email:     "notallowed@example.com",
+					FirstName: "Test",
+					LastName:  "User",
+				},
+				err: nil,
+			}
+			handler := NewGoogleOAuth2Handler(mockProvider, &mockTokenGenerator{})
 
-	router.ServeHTTP(w, req)
+			router := gin.New()
+			router.GET("/callback", handler.GoogleCallbackHandler)
 
-	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "email is not allowed")
+			req := httptest.NewRequest(http.MethodGet, "/callback?state=valid-state&code=test-code", nil)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+			assert.Contains(t, w.Body.String(), "email is not allowed")
+			assert.Empty(t, w.Result().Cookies())
+			assert.Empty(t, w.Header().Get("Location"))
+		})
+	}
 }
 
 func TestGoogleCallbackHandler_TokenGenerationError(t *testing.T) {
