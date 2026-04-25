@@ -61,7 +61,7 @@ func (h *googleOAuth2HandlerImpl) GoogleCallbackHandler(ctx *gin.Context) {
 	}
 
 	if !userInfo.IsEmailAllowed() {
-		ctx.JSON(http.StatusForbidden, gin.H{
+		ctx.JSON(http.StatusUnauthorized, gin.H{
 			"error": "email is not allowed",
 		})
 		return
