@@ -133,6 +133,40 @@ func TestApplication_RegisterGET(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "test")
 }
 
+func TestApplication_RegisterPOST(t *testing.T) {
+	cleanup := createTestConfig(t)
+	defer cleanup()
+
+	gin.SetMode(gin.TestMode)
+
+	app := &Application{}
+	app.UseConfig()
+	app.UseServer()
+
+	handler := func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "created"})
+	}
+
+	app.RegisterPOST("/test", handler)
+
+	t.Run("post route executes handler", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/test", nil)
+		app.Server.Handler.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "created")
+	})
+
+	t.Run("get route is not registered", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+		app.Server.Handler.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
 func TestApplication_RegisterProtectedGET(t *testing.T) {
 	cleanup := createTestConfig(t)
 	defer cleanup()
