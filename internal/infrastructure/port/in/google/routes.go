@@ -52,40 +52,30 @@ func (h *googleOAuth2HandlerImpl) GoogleCallbackHandler(ctx *gin.Context) {
 	securityConfig := pkg.App.Config.GetSecurityConfig().GetOAuth2Config().GetGoogleConfig()
 	state := ctx.Query("state")
 	if state != securityConfig.GetState() {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid state parameter",
-		})
+		pkg.WriteAuthError(ctx, http.StatusBadRequest, pkg.AuthCodeCallbackStateInvalid, "invalid state parameter")
 		return
 	}
 
 	code := ctx.Query("code")
 	if code == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"error": "code parameter is missing",
-		})
+		pkg.WriteAuthError(ctx, http.StatusBadRequest, pkg.AuthCodeCallbackCodeMissing, "code parameter is missing")
 		return
 	}
 
 	userInfo, err := h.providerRepository.GetUserInfo(ctx, code)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get user info",
-		})
+		pkg.WriteAuthError(ctx, http.StatusInternalServerError, pkg.AuthCodeProviderFailure, "authentication provider unavailable")
 		return
 	}
 
 	if !userInfo.IsEmailAllowed() {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"error": "email is not allowed",
-		})
+		pkg.WriteAuthError(ctx, http.StatusUnauthorized, pkg.AuthCodeEmailNotAllowed, "email is not allowed")
 		return
 	}
 
 	token, err := h.tokenGenerator.GenerateToken(userInfo)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to generate token",
-		})
+		pkg.WriteAuthError(ctx, http.StatusInternalServerError, pkg.AuthCodeTokenGenerationFailed, "failed to generate authentication token")
 		return
 	}
 
