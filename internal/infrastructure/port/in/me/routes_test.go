@@ -59,7 +59,16 @@ func TestMeHandler_NoClaims(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "no authentication claims found")
+
+	var payload map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &payload)
+	require.NoError(t, err)
+
+	assert.Equal(t, pkg.AuthCodeClaimsMissing, payload["code"])
+	assert.Equal(t, "no authentication claims found", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestMeHandler_InvalidClaimsFormat(t *testing.T) {
@@ -75,7 +84,16 @@ func TestMeHandler_InvalidClaimsFormat(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid claims format")
+
+	var payload map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &payload)
+	require.NoError(t, err)
+
+	assert.Equal(t, pkg.AuthCodeClaimsInvalid, payload["code"])
+	assert.Equal(t, "invalid authentication claims", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestMeHandler_EmptyFields(t *testing.T) {

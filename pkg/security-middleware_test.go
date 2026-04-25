@@ -3,6 +3,7 @@ package pkg
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func decodeAuthErrorPayload(t *testing.T, body []byte) map[string]string {
+	t.Helper()
+
+	var payload map[string]string
+	err := json.Unmarshal(body, &payload)
+	require.NoError(t, err)
+
+	return payload
+}
 
 func init() {
 	gin.SetMode(gin.TestMode)
@@ -120,7 +131,12 @@ func TestAuthMiddleware_MissingToken(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "missing authentication token")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, AuthCodeTokenMissing, payload["code"])
+	assert.Equal(t, "missing authentication token", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestAuthMiddleware_ValidTokenInHeader(t *testing.T) {
@@ -233,7 +249,12 @@ func TestAuthMiddleware_ExpiredToken(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid or expired token")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, AuthCodeTokenInvalid, payload["code"])
+	assert.Equal(t, "invalid or expired token", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestAuthMiddleware_InvalidIssuer(t *testing.T) {
@@ -315,7 +336,12 @@ func TestAuthMiddleware_MalformedToken(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid or expired token")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, AuthCodeTokenInvalid, payload["code"])
+	assert.Equal(t, "invalid or expired token", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestAuthMiddleware_InvalidAuthorizationFormat(t *testing.T) {
@@ -333,7 +359,12 @@ func TestAuthMiddleware_InvalidAuthorizationFormat(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.Contains(t, w.Body.String(), "missing authentication token")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, AuthCodeTokenMissing, payload["code"])
+	assert.Equal(t, "missing authentication token", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestAuthMiddleware_HeaderTakesPrecedenceOverCookie(t *testing.T) {

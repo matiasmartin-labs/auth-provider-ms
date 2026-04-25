@@ -16,17 +16,13 @@ type MeResponse struct {
 func MeHandler(ctx *gin.Context) {
 	claimsValue, exists := ctx.Get("claims")
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"error": "no authentication claims found",
-		})
+		pkg.WriteAuthError(ctx, http.StatusUnauthorized, pkg.AuthCodeClaimsMissing, "no authentication claims found")
 		return
 	}
 
 	claims, ok := claimsValue.(*pkg.Claims)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": "invalid claims format",
-		})
+		pkg.WriteAuthError(ctx, http.StatusInternalServerError, pkg.AuthCodeClaimsInvalid, "invalid authentication claims")
 		return
 	}
 

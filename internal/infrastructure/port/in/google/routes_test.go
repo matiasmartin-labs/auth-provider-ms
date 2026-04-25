@@ -2,6 +2,7 @@ package google
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,11 +13,22 @@ import (
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/domain/model"
 	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
 
 func init() {
 	gin.SetMode(gin.TestMode)
+}
+
+func decodeAuthErrorPayload(t *testing.T, body []byte) map[string]string {
+	t.Helper()
+
+	var payload map[string]string
+	err := json.Unmarshal(body, &payload)
+	require.NoError(t, err)
+
+	return payload
 }
 
 type mockProviderRepository struct {
@@ -202,7 +214,12 @@ func TestGoogleCallbackHandler_InvalidState(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "invalid state parameter")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, pkg.AuthCodeCallbackStateInvalid, payload["code"])
+	assert.Equal(t, "invalid state parameter", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestGoogleCallbackHandler_MissingCode(t *testing.T) {
@@ -219,7 +236,12 @@ func TestGoogleCallbackHandler_MissingCode(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "code parameter is missing")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, pkg.AuthCodeCallbackCodeMissing, payload["code"])
+	assert.Equal(t, "code parameter is missing", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestGoogleCallbackHandler_ProviderError(t *testing.T) {
@@ -240,7 +262,12 @@ func TestGoogleCallbackHandler_ProviderError(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "failed to get user info")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, pkg.AuthCodeProviderFailure, payload["code"])
+	assert.Equal(t, "authentication provider unavailable", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestGoogleCallbackHandler_EmailNotAllowed(t *testing.T) {
@@ -248,16 +275,22 @@ func TestGoogleCallbackHandler_EmailNotAllowed(t *testing.T) {
 		name            string
 		redirectEnabled bool
 		redirectURL     string
+		expectedCode    string
+		expectedMessage string
 	}{
 		{
 			name:            "without redirect",
 			redirectEnabled: false,
 			redirectURL:     "",
+			expectedCode:    pkg.AuthCodeEmailNotAllowed,
+			expectedMessage: "email is not allowed",
 		},
 		{
 			name:            "with redirect configured",
 			redirectEnabled: true,
 			redirectURL:     "http://localhost:3000/dashboard",
+			expectedCode:    pkg.AuthCodeEmailNotAllowed,
+			expectedMessage: "email is not allowed",
 		},
 	}
 
@@ -284,7 +317,12 @@ func TestGoogleCallbackHandler_EmailNotAllowed(t *testing.T) {
 			router.ServeHTTP(w, req)
 
 			assert.Equal(t, http.StatusUnauthorized, w.Code)
-			assert.Contains(t, w.Body.String(), "email is not allowed")
+			payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+			assert.Equal(t, tc.expectedCode, payload["code"])
+			assert.Equal(t, tc.expectedMessage, payload["message"])
+			assert.Len(t, payload, 2)
+			_, hasLegacyError := payload["error"]
+			assert.False(t, hasLegacyError)
 			assert.Empty(t, w.Result().Cookies())
 			assert.Empty(t, w.Header().Get("Location"))
 		})
@@ -317,7 +355,12 @@ func TestGoogleCallbackHandler_TokenGenerationError(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "failed to generate token")
+	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
+	assert.Equal(t, pkg.AuthCodeTokenGenerationFailed, payload["code"])
+	assert.Equal(t, "failed to generate authentication token", payload["message"])
+	assert.Len(t, payload, 2)
+	_, hasLegacyError := payload["error"]
+	assert.False(t, hasLegacyError)
 }
 
 func TestGoogleCallbackHandler_Success_NoRedirect(t *testing.T) {

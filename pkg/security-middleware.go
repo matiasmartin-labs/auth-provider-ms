@@ -26,17 +26,15 @@ func (app *Application) AuthMiddleware() gin.HandlerFunc {
 
 		token := extractToken(c)
 		if token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "missing authentication token",
-			})
+			WriteAuthError(c, http.StatusUnauthorized, AuthCodeTokenMissing, "missing authentication token")
+			c.Abort()
 			return
 		}
 
 		claims, err := app.validateToken(token)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "invalid or expired token",
-			})
+			WriteAuthError(c, http.StatusUnauthorized, AuthCodeTokenInvalid, "invalid or expired token")
+			c.Abort()
 			return
 		}
 
