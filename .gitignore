@@ -33,3 +33,4 @@ go.work.sum
 .vscode/
 .atl/
 test-report.json
+test-results.json
