@@ -2,6 +2,7 @@ package google
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/application/ports"
@@ -25,6 +26,19 @@ type GoogleOAuth2Handler interface {
 type googleOAuth2HandlerImpl struct {
 	providerRepository ports.ProviderRepository
 	tokenGenerator     ports.TokenGenerator
+}
+
+func parseSameSite(raw string) http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "lax":
+		return http.SameSiteLaxMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSite(0)
+	}
 }
 
 func NewGoogleOAuth2Handler(providerRepository ports.ProviderRepository, tokenGenerator ports.TokenGenerator) GoogleOAuth2Handler {
@@ -77,15 +91,15 @@ func (h *googleOAuth2HandlerImpl) GoogleCallbackHandler(ctx *gin.Context) {
 
 	securityCfg := pkg.App.Config.GetSecurityConfig()
 	cookieCfg := securityCfg.GetCookieConfig()
-	ctx.SetCookie(
-		"token",
-		token,
-		int(cookieCfg.GetMaxAge().Seconds()),
-		"/",
-		"",
-		cookieCfg.GetSecure(),
-		cookieCfg.GetHTTPOnly(),
-	)
+	http.SetCookie(ctx.Writer, &http.Cookie{
+		Name:     "token",
+		Value:    token,
+		Path:     "/",
+		MaxAge:   int(cookieCfg.GetMaxAge().Seconds()),
+		Secure:   cookieCfg.GetSecure(),
+		HttpOnly: cookieCfg.GetHTTPOnly(),
+		SameSite: parseSameSite(cookieCfg.GetSameSite()),
+	})
 	redirectCfg := securityCfg.GetRedirectConfig()
 	if redirectCfg.GetEnabled() {
 		ctx.Redirect(http.StatusTemporaryRedirect, redirectCfg.GetURL())
