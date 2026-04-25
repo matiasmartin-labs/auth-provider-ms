@@ -4,6 +4,7 @@ import (
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/google"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/jwks"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/me"
+	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/signout"
 	googleClient "github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/out/google"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/out/token"
 	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
@@ -17,6 +18,7 @@ func Routes(app *pkg.Application) error {
 	app.RegisterGET("/.well-known/jwks.json", jwks.JwksHandler)
 	app.RegisterGET("/login/oauth2/code/google", googleHandler.GoogleCallbackHandler)
 	app.RegisterGET("/oauth2/authorization/google", googleHandler.GoogleLoginHandler)
+	app.RegisterPOST("/api/v1/auth/sign-out", signout.SignOutHandler)
 
 	app.RegisterProtectedGET("/api/v1/auth/me", me.MeHandler)
 
