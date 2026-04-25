@@ -124,7 +124,16 @@ type mockConfiguration struct {
 func (m *mockConfiguration) GetServerConfig() pkg.ServerConfig     { return nil }
 func (m *mockConfiguration) GetSecurityConfig() pkg.SecurityConfig { return m.securityConfig }
 
-func setupMockApp(state string, allowedEmails []string, redirectEnabled bool, redirectURL string) {
+func setupMockAppWithCookie(state string, allowedEmails []string, redirectEnabled bool, redirectURL string, cookieCfg *mockCookieConfig) {
+	if cookieCfg == nil {
+		cookieCfg = &mockCookieConfig{
+			secure:   false,
+			httpOnly: true,
+			sameSite: "Strict",
+			maxAge:   time.Hour,
+		}
+	}
+
 	pkg.App = &pkg.Application{
 		Config: &mockConfiguration{
 			securityConfig: &mockSecurityConfig{
@@ -139,12 +148,7 @@ func setupMockApp(state string, allowedEmails []string, redirectEnabled bool, re
 					enabled: redirectEnabled,
 					url:     redirectURL,
 				},
-				cookieConfig: &mockCookieConfig{
-					secure:   false,
-					httpOnly: true,
-					sameSite: "Strict",
-					maxAge:   time.Hour,
-				},
+				cookieConfig: cookieCfg,
 				loginConfig: &mockLoginConfig{
 					allowedEmails: allowedEmails,
 				},
@@ -157,6 +161,30 @@ func setupMockApp(state string, allowedEmails []string, redirectEnabled bool, re
 		ClientSecret: "test-secret",
 		RedirectURL:  "http://localhost:8080/callback",
 		Scopes:       []string{"email", "profile"},
+	}
+}
+
+func setupMockApp(state string, allowedEmails []string, redirectEnabled bool, redirectURL string) {
+	setupMockAppWithCookie(state, allowedEmails, redirectEnabled, redirectURL, nil)
+}
+
+func TestParseSameSite(t *testing.T) {
+	testCases := []struct {
+		name     string
+		raw      string
+		expected http.SameSite
+	}{
+		{name: "strict mixed case with spaces", raw: "  sTRicT  ", expected: http.SameSiteStrictMode},
+		{name: "lax mixed case", raw: "LaX", expected: http.SameSiteLaxMode},
+		{name: "none mixed case", raw: "nOnE", expected: http.SameSiteNoneMode},
+		{name: "empty returns omitted mode", raw: "", expected: http.SameSite(0)},
+		{name: "invalid returns omitted mode", raw: "unsupported", expected: http.SameSite(0)},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, parseSameSite(tc.raw))
+		})
 	}
 }
 
@@ -359,6 +387,66 @@ func TestGoogleCallbackHandler_Success_WithRedirect(t *testing.T) {
 
 	assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
 	assert.Equal(t, "http://localhost:3000/dashboard", w.Header().Get("Location"))
+}
+
+func TestGoogleCallbackHandler_Success_SameSiteMapping(t *testing.T) {
+	testCases := []struct {
+		name               string
+		sameSite           string
+		expectedSameSite   string
+		expectSameSiteAttr bool
+	}{
+		{name: "strict mixed case", sameSite: "sTRicT", expectedSameSite: "SameSite=Strict", expectSameSiteAttr: true},
+		{name: "lax mixed case", sameSite: "laX", expectedSameSite: "SameSite=Lax", expectSameSiteAttr: true},
+		{name: "none mixed case", sameSite: "NoNe", expectedSameSite: "SameSite=None", expectSameSiteAttr: true},
+		{name: "empty fallback omits samesite", sameSite: "", expectSameSiteAttr: false},
+		{name: "invalid fallback omits samesite", sameSite: "unsupported", expectSameSiteAttr: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupMockAppWithCookie("valid-state", []string{"test@example.com"}, false, "", &mockCookieConfig{
+				secure:   true,
+				httpOnly: true,
+				sameSite: tc.sameSite,
+				maxAge:   time.Hour,
+			})
+
+			mockProvider := &mockProviderRepository{
+				userInfo: &model.UserInfo{
+					Email:     "test@example.com",
+					FirstName: "Test",
+					LastName:  "User",
+				},
+				err: nil,
+			}
+			mockToken := &mockTokenGenerator{token: "generated-jwt-token", err: nil}
+			handler := NewGoogleOAuth2Handler(mockProvider, mockToken)
+
+			router := gin.New()
+			router.GET("/callback", handler.GoogleCallbackHandler)
+
+			req := httptest.NewRequest(http.MethodGet, "/callback?state=valid-state&code=test-code", nil)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+
+			setCookieHeader := w.Header().Get("Set-Cookie")
+			assert.Contains(t, setCookieHeader, "token=generated-jwt-token")
+			assert.Contains(t, setCookieHeader, "Path=/")
+			assert.Contains(t, setCookieHeader, "Max-Age=3600")
+			assert.Contains(t, setCookieHeader, "HttpOnly")
+			assert.Contains(t, setCookieHeader, "Secure")
+
+			if tc.expectSameSiteAttr {
+				assert.Contains(t, setCookieHeader, tc.expectedSameSite)
+			} else {
+				assert.NotContains(t, setCookieHeader, "SameSite")
+			}
+		})
+	}
 }
 
 func TestGoogleLoginHandler_Redirect(t *testing.T) {
