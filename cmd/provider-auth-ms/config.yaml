@@ -5,7 +5,7 @@ server:
 security:
   auth:
     jwt:
-      secret: ""
+      secret: ${JWT_SECRET}
       issuer: auth-provider-ms
       ttlMinutes: 60
     cookie:
