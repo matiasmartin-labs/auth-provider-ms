@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/rsa"
+	"strings"
 	"time"
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
@@ -16,6 +17,8 @@ import (
 	googleout "github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/out/google"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/out/token"
 )
+
+const googleUserInfoURI = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 // Bootstrap holds the runtime dependencies resolved at startup.
 type Bootstrap struct {
@@ -48,7 +51,7 @@ func Routes(app *fwkapp.Application, b *Bootstrap) error {
 		ExpirationTime: time.Duration(jwtCfg.TTLMinutes) * time.Minute,
 	})
 
-	googleProviderAdapter := googleout.NewGoogleProviderAdapter(oauth2Config, googleProvider.RedirectURL, allowedEmails)
+	googleProviderAdapter := googleout.NewGoogleProviderAdapter(oauth2Config, googleUserInfoURI, allowedEmails)
 
 	googleHandler := googlein.NewGoogleOAuth2Handler(
 		googleProviderAdapter,
@@ -89,7 +92,21 @@ func resolveAllowedEmails(raw string) []string {
 	if raw == "" {
 		return nil
 	}
-	return []string{raw}
+
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		email := strings.TrimSpace(p)
+		if email != "" {
+			out = append(out, email)
+		}
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }
 
 // resolveState reads the OAuth2 state from the provider config.
