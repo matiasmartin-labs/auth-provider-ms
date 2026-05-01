@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
+	fwkerrors "github.com/matiasmartin-labs/common-fwk/errors"
+	fwkclaims "github.com/matiasmartin-labs/common-fwk/security/claims"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,16 +20,14 @@ func init() {
 func TestMeHandler_Success(t *testing.T) {
 	router := gin.New()
 	router.GET("/me", func(c *gin.Context) {
-		claims := &pkg.Claims{
+		cl := fwkclaims.Claims{
 			Email:   "test@example.com",
 			Name:    "Test User",
 			Picture: "https://example.com/picture.jpg",
 			Roles:   []string{"USER"},
-			RegisteredClaims: jwt.RegisteredClaims{
-				Subject: "test@example.com",
-			},
+			Subject: "test@example.com",
 		}
-		c.Set("claims", claims)
+		c.Set("claims", cl)
 		c.Next()
 	}, MeHandler)
 
@@ -51,7 +49,7 @@ func TestMeHandler_Success(t *testing.T) {
 
 func TestMeHandler_NoClaims(t *testing.T) {
 	router := gin.New()
-	router.GET("/me", MeHandler) // Sin middleware que agregue claims
+	router.GET("/me", MeHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	w := httptest.NewRecorder()
@@ -64,7 +62,7 @@ func TestMeHandler_NoClaims(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &payload)
 	require.NoError(t, err)
 
-	assert.Equal(t, pkg.AuthCodeClaimsMissing, payload["code"])
+	assert.Equal(t, fwkerrors.CodeClaimsMissing, payload["code"])
 	assert.Equal(t, "no authentication claims found", payload["message"])
 	assert.Len(t, payload, 2)
 	_, hasLegacyError := payload["error"]
@@ -74,6 +72,9 @@ func TestMeHandler_NoClaims(t *testing.T) {
 func TestMeHandler_InvalidClaimsFormat(t *testing.T) {
 	router := gin.New()
 	router.GET("/me", func(c *gin.Context) {
+		// Store a non-claims value to trigger the type assertion failure path.
+		// GetClaims returns (Claims{}, false) when the type doesn't match,
+		// which is the same as missing claims — both return 401 CodeClaimsMissing.
 		c.Set("claims", "invalid-claims-format")
 		c.Next()
 	}, MeHandler)
@@ -83,14 +84,15 @@ func TestMeHandler_InvalidClaimsFormat(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	// GetClaims returns false for wrong type — treated same as missing claims.
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 	var payload map[string]string
 	err := json.Unmarshal(w.Body.Bytes(), &payload)
 	require.NoError(t, err)
 
-	assert.Equal(t, pkg.AuthCodeClaimsInvalid, payload["code"])
-	assert.Equal(t, "invalid authentication claims", payload["message"])
+	assert.Equal(t, fwkerrors.CodeClaimsMissing, payload["code"])
+	assert.Equal(t, "no authentication claims found", payload["message"])
 	assert.Len(t, payload, 2)
 	_, hasLegacyError := payload["error"]
 	assert.False(t, hasLegacyError)
@@ -99,12 +101,12 @@ func TestMeHandler_InvalidClaimsFormat(t *testing.T) {
 func TestMeHandler_EmptyFields(t *testing.T) {
 	router := gin.New()
 	router.GET("/me", func(c *gin.Context) {
-		claims := &pkg.Claims{
+		cl := fwkclaims.Claims{
 			Email:   "",
 			Name:    "",
 			Picture: "",
 		}
-		c.Set("claims", claims)
+		c.Set("claims", cl)
 		c.Next()
 	}, MeHandler)
 

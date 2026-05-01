@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
+	fwkerrors "github.com/matiasmartin-labs/common-fwk/errors"
+	httpgin "github.com/matiasmartin-labs/common-fwk/http/gin"
+	fwkclaims "github.com/matiasmartin-labs/common-fwk/security/claims"
 )
 
 type MeResponse struct {
@@ -14,21 +16,22 @@ type MeResponse struct {
 }
 
 func MeHandler(ctx *gin.Context) {
-	claimsValue, exists := ctx.Get("claims")
-	if !exists {
-		pkg.WriteAuthError(ctx, http.StatusUnauthorized, pkg.AuthCodeClaimsMissing, "no authentication claims found")
-		return
-	}
-
-	claims, ok := claimsValue.(*pkg.Claims)
+	cl, ok := httpgin.GetClaims(ctx, "claims")
 	if !ok {
-		pkg.WriteAuthError(ctx, http.StatusInternalServerError, pkg.AuthCodeClaimsInvalid, "invalid authentication claims")
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, httpgin.ErrorResponse{
+			Code:    fwkerrors.CodeClaimsMissing,
+			Message: "no authentication claims found",
+		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, MeResponse{
-		Email:   claims.Email,
-		Name:    claims.Name,
-		Picture: claims.Picture,
-	})
+	ctx.JSON(http.StatusOK, toMeResponse(cl))
+}
+
+func toMeResponse(cl fwkclaims.Claims) MeResponse {
+	return MeResponse{
+		Email:   cl.Email,
+		Name:    cl.Name,
+		Picture: cl.Picture,
+	}
 }

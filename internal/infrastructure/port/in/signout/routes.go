@@ -4,28 +4,12 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 )
 
-func SignOutHandler(ctx *gin.Context) {
-	ctx.SetCookie("token", "", 0, "/", "", resolveCookieSecure(), true)
-	ctx.Status(http.StatusNoContent)
-}
-
-func resolveCookieSecure() bool {
-	if pkg.App == nil || pkg.App.Config == nil {
-		return false
+// NewSignOutHandler returns a handler that clears the auth cookie.
+func NewSignOutHandler(cookieSecure bool) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		ctx.SetCookie("token", "", 0, "/", "", cookieSecure, true)
+		ctx.Status(http.StatusNoContent)
 	}
-
-	securityConfig := pkg.App.Config.GetSecurityConfig()
-	if securityConfig == nil {
-		return false
-	}
-
-	cookieConfig := securityConfig.GetCookieConfig()
-	if cookieConfig == nil {
-		return false
-	}
-
-	return cookieConfig.GetSecure()
 }

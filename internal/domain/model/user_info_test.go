@@ -4,50 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 	"github.com/stretchr/testify/assert"
 )
-
-type mockLoginConfig struct {
-	allowedEmails []string
-}
-
-func (m *mockLoginConfig) GetAllowedEmails() []string { return m.allowedEmails }
-
-type mockSecurityConfig struct {
-	loginConfig *mockLoginConfig
-}
-
-func (m *mockSecurityConfig) GetOAuth2Config() pkg.OAuth2Config     { return nil }
-func (m *mockSecurityConfig) GetRedirectConfig() pkg.RedirectConfig { return nil }
-func (m *mockSecurityConfig) GetCookieConfig() pkg.CookieConfig     { return nil }
-func (m *mockSecurityConfig) GetLoginConfig() pkg.LoginConfig       { return m.loginConfig }
-func (m *mockSecurityConfig) GetJWTConfig() pkg.JWTConfig           { return nil }
-func (m *mockSecurityConfig) GetAuthConfig() pkg.AuthConfig         { return nil }
-
-type mockConfiguration struct {
-	securityConfig *mockSecurityConfig
-}
-
-func (m *mockConfiguration) GetServerConfig() pkg.ServerConfig     { return nil }
-func (m *mockConfiguration) GetSecurityConfig() pkg.SecurityConfig { return m.securityConfig }
-
-type mockKeyPair struct{}
-
-func (m *mockKeyPair) PublicJWK() (map[string]interface{}, error) { return nil, nil }
-func (m *mockKeyPair) GetPrivateKey() interface{}                 { return nil }
-
-func setupMockApp(allowedEmails []string) {
-	pkg.App = &pkg.Application{
-		Config: &mockConfiguration{
-			securityConfig: &mockSecurityConfig{
-				loginConfig: &mockLoginConfig{
-					allowedEmails: allowedEmails,
-				},
-			},
-		},
-	}
-}
 
 func TestUserInfo_GetFullName(t *testing.T) {
 	testCases := []struct {
@@ -113,7 +71,6 @@ func TestUserInfo_IsEmailAllowed_Allowed(t *testing.T) {
 		"user2@example.com",
 		"admin@company.org",
 	}
-	setupMockApp(allowedEmails)
 
 	testCases := []struct {
 		email    string
@@ -126,7 +83,7 @@ func TestUserInfo_IsEmailAllowed_Allowed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.email, func(t *testing.T) {
-			userInfo := &UserInfo{Email: tc.email}
+			userInfo := &UserInfo{Email: tc.email, AllowedEmails: allowedEmails}
 			assert.Equal(t, tc.expected, userInfo.IsEmailAllowed())
 		})
 	}
@@ -137,7 +94,6 @@ func TestUserInfo_IsEmailAllowed_NotAllowed(t *testing.T) {
 		"user1@example.com",
 		"user2@example.com",
 	}
-	setupMockApp(allowedEmails)
 
 	testCases := []struct {
 		email    string
@@ -151,23 +107,19 @@ func TestUserInfo_IsEmailAllowed_NotAllowed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.email, func(t *testing.T) {
-			userInfo := &UserInfo{Email: tc.email}
+			userInfo := &UserInfo{Email: tc.email, AllowedEmails: allowedEmails}
 			assert.Equal(t, tc.expected, userInfo.IsEmailAllowed())
 		})
 	}
 }
 
 func TestUserInfo_IsEmailAllowed_EmptyAllowedList(t *testing.T) {
-	setupMockApp([]string{})
-
-	userInfo := &UserInfo{Email: "any@example.com"}
+	userInfo := &UserInfo{Email: "any@example.com", AllowedEmails: []string{}}
 	assert.False(t, userInfo.IsEmailAllowed())
 }
 
 func TestUserInfo_IsEmailAllowed_NilAllowedList(t *testing.T) {
-	setupMockApp(nil)
-
-	userInfo := &UserInfo{Email: "any@example.com"}
+	userInfo := &UserInfo{Email: "any@example.com", AllowedEmails: nil}
 	assert.False(t, userInfo.IsEmailAllowed())
 }
 
@@ -202,9 +154,8 @@ func BenchmarkUserInfo_IsEmailAllowed(b *testing.B) {
 		allowedEmails[i] = "user" + time.Now().String() + "@example.com"
 	}
 	allowedEmails[50] = "target@example.com"
-	setupMockApp(allowedEmails)
 
-	userInfo := &UserInfo{Email: "target@example.com"}
+	userInfo := &UserInfo{Email: "target@example.com", AllowedEmails: allowedEmails}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -1,21 +1,59 @@
 package jwks
 
 import (
+	"crypto/rsa"
+	"encoding/base64"
+	"encoding/binary"
+	"math/big"
+
 	"github.com/gin-gonic/gin"
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
+	"github.com/google/uuid"
 )
 
-func JwksHandler(ctx *gin.Context) {
+// KeyPair holds an RSA keypair with an associated key ID.
+type KeyPair struct {
+	PrivateKey *rsa.PrivateKey
+	KeyID      string
+}
 
-	publicJwk, err := pkg.App.KeyPair.PublicJWK()
-	if err != nil {
-		ctx.JSON(500, gin.H{
-			"error": "failed to get public JWK",
-		})
-		return
+// NewKeyPair generates a key ID and wraps the provided private key.
+func NewKeyPair(privateKey *rsa.PrivateKey) *KeyPair {
+	return &KeyPair{
+		PrivateKey: privateKey,
+		KeyID:      uuid.NewString(),
 	}
+}
 
-	ctx.JSON(200, gin.H{
-		"keys": []interface{}{publicJwk},
-	})
+// NewJwksHandler returns a Gin handler that serves the RSA public key as a JWKS JSON response.
+func NewJwksHandler(kp *KeyPair) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		pub := &kp.PrivateKey.PublicKey
+
+		ctx.JSON(200, gin.H{
+			"keys": []gin.H{
+				{
+					"kty": "RSA",
+					"kid": kp.KeyID,
+					"use": "sig",
+					"alg": "RS256",
+					"n":   base64URLEncode(pub.N),
+					"e":   base64URLEncodeInt(pub.E),
+				},
+			},
+		})
+	}
+}
+
+func base64URLEncode(n *big.Int) string {
+	return base64.RawURLEncoding.EncodeToString(n.Bytes())
+}
+
+func base64URLEncodeInt(e int) string {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, uint32(e)) //nolint:gosec
+	// trim leading zero bytes
+	for len(b) > 1 && b[0] == 0 {
+		b = b[1:]
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
 }

@@ -5,17 +5,25 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/oauth2"
+
+	fwkerrors "github.com/matiasmartin-labs/common-fwk/errors"
+	httpgin "github.com/matiasmartin-labs/common-fwk/http/gin"
+
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/application/ports"
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 )
 
-type GoogleUserInfo struct {
-	ID            string `json:"id"`
-	Email         string `json:"email"`
-	VerifiedEmail bool   `json:"verified_email"`
-	Picture       string `json:"picture"`
-	FirstName     string `json:"given_name"`
-	LastName      string `json:"family_name"`
+// GoogleOAuth2Config holds the configuration needed by the Google OAuth2 handler.
+type GoogleOAuth2Config struct {
+	OAuth2Config  *oauth2.Config
+	State         string
+	CookieName    string
+	CookieMaxAge  int
+	CookieSecure  bool
+	CookieHTTPOnly bool
+	CookieSameSite string
+	RedirectEnabled bool
+	RedirectURL     string
 }
 
 type GoogleOAuth2Handler interface {
@@ -26,6 +34,19 @@ type GoogleOAuth2Handler interface {
 type googleOAuth2HandlerImpl struct {
 	providerRepository ports.ProviderRepository
 	tokenGenerator     ports.TokenGenerator
+	cfg                GoogleOAuth2Config
+}
+
+func NewGoogleOAuth2Handler(
+	providerRepository ports.ProviderRepository,
+	tokenGenerator ports.TokenGenerator,
+	cfg GoogleOAuth2Config,
+) GoogleOAuth2Handler {
+	return &googleOAuth2HandlerImpl{
+		providerRepository: providerRepository,
+		tokenGenerator:     tokenGenerator,
+		cfg:                cfg,
+	}
 }
 
 func parseSameSite(raw string) http.SameSite {
@@ -41,68 +62,70 @@ func parseSameSite(raw string) http.SameSite {
 	}
 }
 
-func NewGoogleOAuth2Handler(providerRepository ports.ProviderRepository, tokenGenerator ports.TokenGenerator) GoogleOAuth2Handler {
-	return &googleOAuth2HandlerImpl{
-		providerRepository: providerRepository,
-		tokenGenerator:     tokenGenerator,
-	}
-}
-
 func (h *googleOAuth2HandlerImpl) GoogleCallbackHandler(ctx *gin.Context) {
-	securityConfig := pkg.App.Config.GetSecurityConfig().GetOAuth2Config().GetGoogleConfig()
 	state := ctx.Query("state")
-	if state != securityConfig.GetState() {
-		pkg.WriteAuthError(ctx, http.StatusBadRequest, pkg.AuthCodeCallbackStateInvalid, "invalid state parameter")
+	if state != h.cfg.State {
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, httpgin.ErrorResponse{
+			Code:    fwkerrors.CodeCallbackStateInvalid,
+			Message: "invalid state parameter",
+		})
 		return
 	}
 
 	code := ctx.Query("code")
 	if code == "" {
-		pkg.WriteAuthError(ctx, http.StatusBadRequest, pkg.AuthCodeCallbackCodeMissing, "code parameter is missing")
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, httpgin.ErrorResponse{
+			Code:    fwkerrors.CodeCallbackCodeMissing,
+			Message: "code parameter is missing",
+		})
 		return
 	}
 
 	userInfo, err := h.providerRepository.GetUserInfo(ctx, code)
 	if err != nil {
-		pkg.WriteAuthError(ctx, http.StatusInternalServerError, pkg.AuthCodeProviderFailure, "authentication provider unavailable")
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, httpgin.ErrorResponse{
+			Code:    fwkerrors.CodeProviderFailure,
+			Message: "authentication provider unavailable",
+		})
 		return
 	}
 
 	if !userInfo.IsEmailAllowed() {
-		pkg.WriteAuthError(ctx, http.StatusUnauthorized, pkg.AuthCodeEmailNotAllowed, "email is not allowed")
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, httpgin.ErrorResponse{
+			Code:    fwkerrors.CodeEmailNotAllowed,
+			Message: "email is not allowed",
+		})
 		return
 	}
 
 	token, err := h.tokenGenerator.GenerateToken(userInfo)
 	if err != nil {
-		pkg.WriteAuthError(ctx, http.StatusInternalServerError, pkg.AuthCodeTokenGenerationFailed, "failed to generate authentication token")
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, httpgin.ErrorResponse{
+			Code:    fwkerrors.CodeTokenGenerationFailed,
+			Message: "failed to generate authentication token",
+		})
 		return
 	}
 
-	securityCfg := pkg.App.Config.GetSecurityConfig()
-	cookieCfg := securityCfg.GetCookieConfig()
 	http.SetCookie(ctx.Writer, &http.Cookie{
-		Name:     "token",
+		Name:     h.cfg.CookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(cookieCfg.GetMaxAge().Seconds()),
-		Secure:   cookieCfg.GetSecure(),
-		HttpOnly: cookieCfg.GetHTTPOnly(),
-		SameSite: parseSameSite(cookieCfg.GetSameSite()),
+		MaxAge:   h.cfg.CookieMaxAge,
+		Secure:   h.cfg.CookieSecure,
+		HttpOnly: h.cfg.CookieHTTPOnly,
+		SameSite: parseSameSite(h.cfg.CookieSameSite),
 	})
-	redirectCfg := securityCfg.GetRedirectConfig()
-	if redirectCfg.GetEnabled() {
-		ctx.Redirect(http.StatusTemporaryRedirect, redirectCfg.GetURL())
+
+	if h.cfg.RedirectEnabled {
+		ctx.Redirect(http.StatusTemporaryRedirect, h.cfg.RedirectURL)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"token": token,
-	})
+	ctx.JSON(http.StatusOK, gin.H{"token": token})
 }
 
 func (h *googleOAuth2HandlerImpl) GoogleLoginHandler(ctx *gin.Context) {
-	securityConfig := pkg.App.Config.GetSecurityConfig().GetOAuth2Config().GetGoogleConfig()
-	url := pkg.GoogleOAuth2Config.AuthCodeURL(securityConfig.GetState())
+	url := h.cfg.OAuth2Config.AuthCodeURL(h.cfg.State)
 	ctx.Redirect(http.StatusTemporaryRedirect, url)
 }
