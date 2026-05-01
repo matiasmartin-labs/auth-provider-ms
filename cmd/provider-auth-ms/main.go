@@ -1,9 +1,11 @@
 package main
 
 import (
+	"flag"
 	"crypto/rand"
 	"crypto/rsa"
 	"log"
+	"os"
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
 	fwkviper "github.com/matiasmartin-labs/common-fwk/config/viper"
@@ -14,10 +16,17 @@ import (
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/server"
 )
 
+const (
+	defaultConfigPath = "./config.yaml"
+	configPathEnvKey  = "CONFIG_PATH"
+)
+
 func main() {
 	// ---- Config ----
+	configPath := resolveConfigPath()
+
 	cfg, err := fwkviper.Load(fwkviper.Options{
-		ConfigPath: "./config.yaml",
+		ConfigPath: configPath,
 		ExpandEnv:  true,
 	})
 	if err != nil {
@@ -62,4 +71,19 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatalf("run: %v", err)
 	}
+}
+
+func resolveConfigPath() string {
+	configPathFlag := flag.String("config", "", "Path to config file")
+	flag.Parse()
+
+	if *configPathFlag != "" {
+		return *configPathFlag
+	}
+
+	if envPath := os.Getenv(configPathEnvKey); envPath != "" {
+		return envPath
+	}
+
+	return defaultConfigPath
 }
