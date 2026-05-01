@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	fwkerrors "github.com/matiasmartin-labs/common-fwk/errors"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/domain/model"
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+	googleoauth "golang.org/x/oauth2/google"
 )
 
 func init() {
@@ -49,135 +50,44 @@ func (m *mockTokenGenerator) GenerateToken(userInfo *model.UserInfo) (string, er
 	return m.token, m.err
 }
 
-type mockOAuth2ClientConfig struct {
-	clientID     string
-	clientSecret string
-	redirectURI  string
-	state        string
-	scopes       []string
-	userInfoURI  string
-}
-
-func (m *mockOAuth2ClientConfig) GetClientID() string     { return m.clientID }
-func (m *mockOAuth2ClientConfig) GetClientSecret() string { return m.clientSecret }
-func (m *mockOAuth2ClientConfig) GetRedirectURI() string  { return m.redirectURI }
-func (m *mockOAuth2ClientConfig) GetState() string        { return m.state }
-func (m *mockOAuth2ClientConfig) GetScopes() []string     { return m.scopes }
-func (m *mockOAuth2ClientConfig) GetUserInfoURI() string  { return m.userInfoURI }
-
-type mockOAuth2Config struct {
-	googleConfig *mockOAuth2ClientConfig
-}
-
-func (m *mockOAuth2Config) GetGoogleConfig() pkg.OAuth2ClientConfig { return m.googleConfig }
-
-type mockRedirectConfig struct {
-	enabled bool
-	url     string
-}
-
-func (m *mockRedirectConfig) GetEnabled() bool { return m.enabled }
-func (m *mockRedirectConfig) GetURL() string   { return m.url }
-
-type mockCookieConfig struct {
+// cookieOptions groups cookie settings for test helpers.
+type cookieOptions struct {
 	secure   bool
 	httpOnly bool
 	sameSite string
-	maxAge   time.Duration
+	maxAge   int
 }
 
-func (m *mockCookieConfig) GetSecure() bool          { return m.secure }
-func (m *mockCookieConfig) GetHTTPOnly() bool        { return m.httpOnly }
-func (m *mockCookieConfig) GetSameSite() string      { return m.sameSite }
-func (m *mockCookieConfig) GetMaxAge() time.Duration { return m.maxAge }
-
-type mockLoginConfig struct {
-	allowedEmails []string
+var defaultCookieOptions = cookieOptions{
+	secure:   false,
+	httpOnly: true,
+	sameSite: "Strict",
+	maxAge:   0,
 }
 
-func (m *mockLoginConfig) GetAllowedEmails() []string { return m.allowedEmails }
-
-type mockJWTConfig struct {
-	issuer         string
-	audience       string
-	expirationTime time.Duration
-}
-
-func (m *mockJWTConfig) GetIssuer() string                { return m.issuer }
-func (m *mockJWTConfig) GetAudience() string              { return m.audience }
-func (m *mockJWTConfig) GetExpirationTime() time.Duration { return m.expirationTime }
-
-type mockAuthConfig struct {
-	enabled bool
-}
-
-func (m *mockAuthConfig) IsEnabled() bool { return m.enabled }
-
-type mockSecurityConfig struct {
-	oauth2Config   *mockOAuth2Config
-	redirectConfig *mockRedirectConfig
-	cookieConfig   *mockCookieConfig
-	loginConfig    *mockLoginConfig
-	jwtConfig      *mockJWTConfig
-	authConfig     *mockAuthConfig
-}
-
-func (m *mockSecurityConfig) GetOAuth2Config() pkg.OAuth2Config     { return m.oauth2Config }
-func (m *mockSecurityConfig) GetRedirectConfig() pkg.RedirectConfig { return m.redirectConfig }
-func (m *mockSecurityConfig) GetCookieConfig() pkg.CookieConfig     { return m.cookieConfig }
-func (m *mockSecurityConfig) GetLoginConfig() pkg.LoginConfig       { return m.loginConfig }
-func (m *mockSecurityConfig) GetJWTConfig() pkg.JWTConfig           { return m.jwtConfig }
-func (m *mockSecurityConfig) GetAuthConfig() pkg.AuthConfig         { return m.authConfig }
-
-type mockConfiguration struct {
-	securityConfig *mockSecurityConfig
-}
-
-func (m *mockConfiguration) GetServerConfig() pkg.ServerConfig     { return nil }
-func (m *mockConfiguration) GetSecurityConfig() pkg.SecurityConfig { return m.securityConfig }
-
-func setupMockAppWithCookie(state string, allowedEmails []string, redirectEnabled bool, redirectURL string, cookieCfg *mockCookieConfig) {
-	if cookieCfg == nil {
-		cookieCfg = &mockCookieConfig{
-			secure:   false,
-			httpOnly: true,
-			sameSite: "Strict",
-			maxAge:   time.Hour,
-		}
-	}
-
-	pkg.App = &pkg.Application{
-		Config: &mockConfiguration{
-			securityConfig: &mockSecurityConfig{
-				oauth2Config: &mockOAuth2Config{
-					googleConfig: &mockOAuth2ClientConfig{
-						state:       state,
-						clientID:    "test-client-id",
-						redirectURI: "http://localhost:8080/callback",
-					},
-				},
-				redirectConfig: &mockRedirectConfig{
-					enabled: redirectEnabled,
-					url:     redirectURL,
-				},
-				cookieConfig: cookieCfg,
-				loginConfig: &mockLoginConfig{
-					allowedEmails: allowedEmails,
-				},
-			},
+// buildConfig builds a GoogleOAuth2Config for tests.
+func buildConfig(state string, redirectEnabled bool, redirectURL string, cookie cookieOptions) GoogleOAuth2Config {
+	return GoogleOAuth2Config{
+		OAuth2Config: &oauth2.Config{
+			ClientID:     "test-client-id",
+			ClientSecret: "test-secret",
+			RedirectURL:  "http://localhost:8080/callback",
+			Scopes:       []string{"email", "profile"},
+			Endpoint:     googleoauth.Endpoint,
 		},
-	}
-
-	pkg.GoogleOAuth2Config = &oauth2.Config{
-		ClientID:     "test-client-id",
-		ClientSecret: "test-secret",
-		RedirectURL:  "http://localhost:8080/callback",
-		Scopes:       []string{"email", "profile"},
+		State:           state,
+		CookieName:      "token",
+		CookieMaxAge:    cookie.maxAge,
+		CookieSecure:    cookie.secure,
+		CookieHTTPOnly:  cookie.httpOnly,
+		CookieSameSite:  cookie.sameSite,
+		RedirectEnabled: redirectEnabled,
+		RedirectURL:     redirectURL,
 	}
 }
 
-func setupMockApp(state string, allowedEmails []string, redirectEnabled bool, redirectURL string) {
-	setupMockAppWithCookie(state, allowedEmails, redirectEnabled, redirectURL, nil)
+func buildDefaultConfig(state string, redirectEnabled bool, redirectURL string) GoogleOAuth2Config {
+	return buildConfig(state, redirectEnabled, redirectURL, defaultCookieOptions)
 }
 
 func TestParseSameSite(t *testing.T) {
@@ -201,9 +111,8 @@ func TestParseSameSite(t *testing.T) {
 }
 
 func TestGoogleCallbackHandler_InvalidState(t *testing.T) {
-	setupMockApp("valid-state", []string{}, false, "")
-
-	handler := NewGoogleOAuth2Handler(&mockProviderRepository{}, &mockTokenGenerator{})
+	cfg := buildDefaultConfig("valid-state", false, "")
+	handler := NewGoogleOAuth2Handler(&mockProviderRepository{}, &mockTokenGenerator{}, cfg)
 
 	router := gin.New()
 	router.GET("/callback", handler.GoogleCallbackHandler)
@@ -215,7 +124,7 @@ func TestGoogleCallbackHandler_InvalidState(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
-	assert.Equal(t, pkg.AuthCodeCallbackStateInvalid, payload["code"])
+	assert.Equal(t, fwkerrors.CodeCallbackStateInvalid, payload["code"])
 	assert.Equal(t, "invalid state parameter", payload["message"])
 	assert.Len(t, payload, 2)
 	_, hasLegacyError := payload["error"]
@@ -223,9 +132,8 @@ func TestGoogleCallbackHandler_InvalidState(t *testing.T) {
 }
 
 func TestGoogleCallbackHandler_MissingCode(t *testing.T) {
-	setupMockApp("valid-state", []string{}, false, "")
-
-	handler := NewGoogleOAuth2Handler(&mockProviderRepository{}, &mockTokenGenerator{})
+	cfg := buildDefaultConfig("valid-state", false, "")
+	handler := NewGoogleOAuth2Handler(&mockProviderRepository{}, &mockTokenGenerator{}, cfg)
 
 	router := gin.New()
 	router.GET("/callback", handler.GoogleCallbackHandler)
@@ -237,7 +145,7 @@ func TestGoogleCallbackHandler_MissingCode(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
-	assert.Equal(t, pkg.AuthCodeCallbackCodeMissing, payload["code"])
+	assert.Equal(t, fwkerrors.CodeCallbackCodeMissing, payload["code"])
 	assert.Equal(t, "code parameter is missing", payload["message"])
 	assert.Len(t, payload, 2)
 	_, hasLegacyError := payload["error"]
@@ -245,13 +153,12 @@ func TestGoogleCallbackHandler_MissingCode(t *testing.T) {
 }
 
 func TestGoogleCallbackHandler_ProviderError(t *testing.T) {
-	setupMockApp("valid-state", []string{}, false, "")
-
+	cfg := buildDefaultConfig("valid-state", false, "")
 	mockProvider := &mockProviderRepository{
 		userInfo: nil,
 		err:      errors.New("provider error"),
 	}
-	handler := NewGoogleOAuth2Handler(mockProvider, &mockTokenGenerator{})
+	handler := NewGoogleOAuth2Handler(mockProvider, &mockTokenGenerator{}, cfg)
 
 	router := gin.New()
 	router.GET("/callback", handler.GoogleCallbackHandler)
@@ -263,7 +170,7 @@ func TestGoogleCallbackHandler_ProviderError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
-	assert.Equal(t, pkg.AuthCodeProviderFailure, payload["code"])
+	assert.Equal(t, fwkerrors.CodeProviderFailure, payload["code"])
 	assert.Equal(t, "authentication provider unavailable", payload["message"])
 	assert.Len(t, payload, 2)
 	_, hasLegacyError := payload["error"]
@@ -282,31 +189,31 @@ func TestGoogleCallbackHandler_EmailNotAllowed(t *testing.T) {
 			name:            "without redirect",
 			redirectEnabled: false,
 			redirectURL:     "",
-			expectedCode:    pkg.AuthCodeEmailNotAllowed,
+			expectedCode:    fwkerrors.CodeEmailNotAllowed,
 			expectedMessage: "email is not allowed",
 		},
 		{
 			name:            "with redirect configured",
 			redirectEnabled: true,
 			redirectURL:     "http://localhost:3000/dashboard",
-			expectedCode:    pkg.AuthCodeEmailNotAllowed,
+			expectedCode:    fwkerrors.CodeEmailNotAllowed,
 			expectedMessage: "email is not allowed",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setupMockApp("valid-state", []string{"allowed@example.com"}, tc.redirectEnabled, tc.redirectURL)
-
+			cfg := buildDefaultConfig("valid-state", tc.redirectEnabled, tc.redirectURL)
 			mockProvider := &mockProviderRepository{
 				userInfo: &model.UserInfo{
-					Email:     "notallowed@example.com",
-					FirstName: "Test",
-					LastName:  "User",
+					Email:         "notallowed@example.com",
+					FirstName:     "Test",
+					LastName:      "User",
+					AllowedEmails: []string{"allowed@example.com"},
 				},
 				err: nil,
 			}
-			handler := NewGoogleOAuth2Handler(mockProvider, &mockTokenGenerator{})
+			handler := NewGoogleOAuth2Handler(mockProvider, &mockTokenGenerator{}, cfg)
 
 			router := gin.New()
 			router.GET("/callback", handler.GoogleCallbackHandler)
@@ -330,13 +237,13 @@ func TestGoogleCallbackHandler_EmailNotAllowed(t *testing.T) {
 }
 
 func TestGoogleCallbackHandler_TokenGenerationError(t *testing.T) {
-	setupMockApp("valid-state", []string{"test@example.com"}, false, "")
-
+	cfg := buildDefaultConfig("valid-state", false, "")
 	mockProvider := &mockProviderRepository{
 		userInfo: &model.UserInfo{
-			Email:     "test@example.com",
-			FirstName: "Test",
-			LastName:  "User",
+			Email:         "test@example.com",
+			FirstName:     "Test",
+			LastName:      "User",
+			AllowedEmails: []string{"test@example.com"},
 		},
 		err: nil,
 	}
@@ -344,7 +251,7 @@ func TestGoogleCallbackHandler_TokenGenerationError(t *testing.T) {
 		token: "",
 		err:   errors.New("token generation error"),
 	}
-	handler := NewGoogleOAuth2Handler(mockProvider, mockToken)
+	handler := NewGoogleOAuth2Handler(mockProvider, mockToken, cfg)
 
 	router := gin.New()
 	router.GET("/callback", handler.GoogleCallbackHandler)
@@ -356,7 +263,7 @@ func TestGoogleCallbackHandler_TokenGenerationError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	payload := decodeAuthErrorPayload(t, w.Body.Bytes())
-	assert.Equal(t, pkg.AuthCodeTokenGenerationFailed, payload["code"])
+	assert.Equal(t, fwkerrors.CodeTokenGenerationFailed, payload["code"])
 	assert.Equal(t, "failed to generate authentication token", payload["message"])
 	assert.Len(t, payload, 2)
 	_, hasLegacyError := payload["error"]
@@ -364,13 +271,13 @@ func TestGoogleCallbackHandler_TokenGenerationError(t *testing.T) {
 }
 
 func TestGoogleCallbackHandler_Success_NoRedirect(t *testing.T) {
-	setupMockApp("valid-state", []string{"test@example.com"}, false, "")
-
+	cfg := buildDefaultConfig("valid-state", false, "")
 	mockProvider := &mockProviderRepository{
 		userInfo: &model.UserInfo{
-			Email:     "test@example.com",
-			FirstName: "Test",
-			LastName:  "User",
+			Email:         "test@example.com",
+			FirstName:     "Test",
+			LastName:      "User",
+			AllowedEmails: []string{"test@example.com"},
 		},
 		err: nil,
 	}
@@ -378,7 +285,7 @@ func TestGoogleCallbackHandler_Success_NoRedirect(t *testing.T) {
 		token: "generated-jwt-token",
 		err:   nil,
 	}
-	handler := NewGoogleOAuth2Handler(mockProvider, mockToken)
+	handler := NewGoogleOAuth2Handler(mockProvider, mockToken, cfg)
 
 	router := gin.New()
 	router.GET("/callback", handler.GoogleCallbackHandler)
@@ -404,13 +311,13 @@ func TestGoogleCallbackHandler_Success_NoRedirect(t *testing.T) {
 }
 
 func TestGoogleCallbackHandler_Success_WithRedirect(t *testing.T) {
-	setupMockApp("valid-state", []string{"test@example.com"}, true, "http://localhost:3000/dashboard")
-
+	cfg := buildDefaultConfig("valid-state", true, "http://localhost:3000/dashboard")
 	mockProvider := &mockProviderRepository{
 		userInfo: &model.UserInfo{
-			Email:     "test@example.com",
-			FirstName: "Test",
-			LastName:  "User",
+			Email:         "test@example.com",
+			FirstName:     "Test",
+			LastName:      "User",
+			AllowedEmails: []string{"test@example.com"},
 		},
 		err: nil,
 	}
@@ -418,7 +325,7 @@ func TestGoogleCallbackHandler_Success_WithRedirect(t *testing.T) {
 		token: "generated-jwt-token",
 		err:   nil,
 	}
-	handler := NewGoogleOAuth2Handler(mockProvider, mockToken)
+	handler := NewGoogleOAuth2Handler(mockProvider, mockToken, cfg)
 
 	router := gin.New()
 	router.GET("/callback", handler.GoogleCallbackHandler)
@@ -448,23 +355,23 @@ func TestGoogleCallbackHandler_Success_SameSiteMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setupMockAppWithCookie("valid-state", []string{"test@example.com"}, false, "", &mockCookieConfig{
+			cfg := buildConfig("valid-state", false, "", cookieOptions{
 				secure:   true,
 				httpOnly: true,
 				sameSite: tc.sameSite,
-				maxAge:   time.Hour,
+				maxAge:   int(time.Hour.Seconds()),
 			})
-
 			mockProvider := &mockProviderRepository{
 				userInfo: &model.UserInfo{
-					Email:     "test@example.com",
-					FirstName: "Test",
-					LastName:  "User",
+					Email:         "test@example.com",
+					FirstName:     "Test",
+					LastName:      "User",
+					AllowedEmails: []string{"test@example.com"},
 				},
 				err: nil,
 			}
 			mockToken := &mockTokenGenerator{token: "generated-jwt-token", err: nil}
-			handler := NewGoogleOAuth2Handler(mockProvider, mockToken)
+			handler := NewGoogleOAuth2Handler(mockProvider, mockToken, cfg)
 
 			router := gin.New()
 			router.GET("/callback", handler.GoogleCallbackHandler)
@@ -493,9 +400,8 @@ func TestGoogleCallbackHandler_Success_SameSiteMapping(t *testing.T) {
 }
 
 func TestGoogleLoginHandler_Redirect(t *testing.T) {
-	setupMockApp("test-state", []string{}, false, "")
-
-	handler := NewGoogleOAuth2Handler(&mockProviderRepository{}, &mockTokenGenerator{})
+	cfg := buildDefaultConfig("test-state", false, "")
+	handler := NewGoogleOAuth2Handler(&mockProviderRepository{}, &mockTokenGenerator{}, cfg)
 
 	router := gin.New()
 	router.GET("/login", handler.GoogleLoginHandler)
@@ -516,8 +422,9 @@ func TestGoogleLoginHandler_Redirect(t *testing.T) {
 func TestNewGoogleOAuth2Handler(t *testing.T) {
 	mockProvider := &mockProviderRepository{}
 	mockToken := &mockTokenGenerator{}
+	cfg := buildDefaultConfig("", false, "")
 
-	handler := NewGoogleOAuth2Handler(mockProvider, mockToken)
+	handler := NewGoogleOAuth2Handler(mockProvider, mockToken, cfg)
 
 	assert.NotNil(t, handler)
 	_, ok := handler.(GoogleOAuth2Handler)

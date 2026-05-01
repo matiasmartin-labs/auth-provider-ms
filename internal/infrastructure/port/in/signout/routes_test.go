@@ -4,40 +4,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/matiasmartin-labs/auth-provider-ms/pkg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type testCookieConfig struct {
-	secure bool
-}
-
-func (c *testCookieConfig) GetSecure() bool          { return c.secure }
-func (c *testCookieConfig) GetHTTPOnly() bool        { return false }
-func (c *testCookieConfig) GetSameSite() string      { return "" }
-func (c *testCookieConfig) GetMaxAge() time.Duration { return 0 }
-
-type testSecurityConfig struct {
-	cookieConfig pkg.CookieConfig
-}
-
-func (s *testSecurityConfig) GetOAuth2Config() pkg.OAuth2Config     { return nil }
-func (s *testSecurityConfig) GetRedirectConfig() pkg.RedirectConfig { return nil }
-func (s *testSecurityConfig) GetCookieConfig() pkg.CookieConfig     { return s.cookieConfig }
-func (s *testSecurityConfig) GetLoginConfig() pkg.LoginConfig       { return nil }
-func (s *testSecurityConfig) GetJWTConfig() pkg.JWTConfig           { return nil }
-func (s *testSecurityConfig) GetAuthConfig() pkg.AuthConfig         { return nil }
-
-type testConfiguration struct {
-	securityConfig pkg.SecurityConfig
-}
-
-func (c *testConfiguration) GetServerConfig() pkg.ServerConfig     { return nil }
-func (c *testConfiguration) GetSecurityConfig() pkg.SecurityConfig { return c.securityConfig }
 
 func TestSignOutHandler_ClearsTokenCookieAndReturnsNoContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -60,14 +31,8 @@ func TestSignOutHandler_ClearsTokenCookieAndReturnsNoContent(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			pkg.App = &pkg.Application{
-				Config: &testConfiguration{
-					securityConfig: &testSecurityConfig{cookieConfig: &testCookieConfig{secure: tc.secureEnabled}},
-				},
-			}
-
 			router := gin.New()
-			router.POST("/api/v1/auth/sign-out", SignOutHandler)
+			router.POST("/api/v1/auth/sign-out", NewSignOutHandler(tc.secureEnabled))
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/sign-out", nil)
 			w := httptest.NewRecorder()
@@ -89,14 +54,9 @@ func TestSignOutHandler_ClearsTokenCookieAndReturnsNoContent(t *testing.T) {
 
 func TestSignOutHandler_IsIdempotentAcrossRepeatedCalls(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	pkg.App = &pkg.Application{
-		Config: &testConfiguration{
-			securityConfig: &testSecurityConfig{cookieConfig: &testCookieConfig{secure: true}},
-		},
-	}
 
 	router := gin.New()
-	router.POST("/api/v1/auth/sign-out", SignOutHandler)
+	router.POST("/api/v1/auth/sign-out", NewSignOutHandler(true))
 
 	firstRequest := httptest.NewRequest(http.MethodPost, "/api/v1/auth/sign-out", nil)
 	firstResponse := httptest.NewRecorder()

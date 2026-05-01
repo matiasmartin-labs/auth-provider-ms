@@ -1,12 +1,11 @@
 package model
 
-import "github.com/matiasmartin-labs/auth-provider-ms/pkg"
-
 type UserInfo struct {
-	Email     string
-	FirstName string
-	LastName  string
-	Picture   string
+	Email         string
+	FirstName     string
+	LastName      string
+	Picture       string
+	AllowedEmails []string
 }
 
 func (u *UserInfo) GetFullName() string {
@@ -14,10 +13,8 @@ func (u *UserInfo) GetFullName() string {
 }
 
 func (u *UserInfo) IsEmailAllowed() bool {
-	securityCfg := pkg.App.Config.GetSecurityConfig().GetLoginConfig()
-	allowedEmails := securityCfg.GetAllowedEmails()
-	for _, allowedEmail := range allowedEmails {
-		if allowedEmail == u.Email {
+	for _, allowed := range u.AllowedEmails {
+		if allowed == u.Email {
 			return true
 		}
 	}

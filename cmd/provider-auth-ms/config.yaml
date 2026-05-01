@@ -1,34 +1,29 @@
 server:
+  host: ""
   port: 8080
-  read-timeout: 10s
-  write-timeout: 10s
-  max-header-bytes: 1048576
 
 security:
   auth:
-    enabled: true
-  redirect:
-    enabled: false
-    url: http://localhost:5173
-  cookie:
-    secure: false
-    http-only: true
-    same-site: Strict
-    max-age: 1h
-  login:
-    allowed-emails: ${ALLOWED_EMAILS}
-  jwt:
-    issuer: auth-provider-ms
-    aud: auth-provider-clients
-    expiration-time: 1h
-  oauth2:
-    client:
-      google:
-        user-info-uri: https://www.googleapis.com/oauth2/v2/userinfo
-        client-id: ${GOOGLE_CLIENT_ID}
-        client-secret: ${GOOGLE_CLIENT_SECRET}
-        state: ${GOOGLE_STATE}
-        redirect-uri: http://localhost:8080/login/oauth2/code/google
-        scopes:
-          - https://www.googleapis.com/auth/userinfo.email
-          - https://www.googleapis.com/auth/userinfo.profile
+    jwt:
+      secret: ${JWT_SECRET}
+      issuer: auth-provider-ms
+      ttlMinutes: 60
+    cookie:
+      name: token
+      domain: ""
+      secure: false
+      httpOnly: true
+      sameSite: Strict
+    login:
+      email: ${ALLOWED_EMAILS}
+    oauth2:
+      providers:
+        google:
+          clientID: ${GOOGLE_CLIENT_ID}
+          clientSecret: ${GOOGLE_CLIENT_SECRET}
+          authURL: https://accounts.google.com/o/oauth2/auth
+          tokenURL: https://oauth2.googleapis.com/token
+          redirectURL: http://localhost:8080/login/oauth2/code/google
+          scopes:
+            - https://www.googleapis.com/auth/userinfo.email
+            - https://www.googleapis.com/auth/userinfo.profile
