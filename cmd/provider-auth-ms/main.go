@@ -4,13 +4,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"log"
-	"path/filepath"
-	"runtime"
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
+	fwkviper "github.com/matiasmartin-labs/common-fwk/config/viper"
 	fwkjwt "github.com/matiasmartin-labs/common-fwk/security/jwt"
 	fwkkeys "github.com/matiasmartin-labs/common-fwk/security/keys"
-	fwkviper "github.com/matiasmartin-labs/common-fwk/config/viper"
 
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/jwks"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/server"
@@ -18,11 +16,8 @@ import (
 
 func main() {
 	// ---- Config ----
-	_, filename, _, _ := runtime.Caller(0)
-	configPath := filepath.Join(filepath.Dir(filename), "config.yaml")
-
 	cfg, err := fwkviper.Load(fwkviper.Options{
-		ConfigPath: configPath,
+		ConfigPath: "./config.yaml",
 		ExpandEnv:  true,
 	})
 	if err != nil {
