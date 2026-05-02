@@ -1,10 +1,40 @@
-name: auth-provider-ms
-image: ghcr.io/matiasmartin-labs/auth-provider-ms
-port: 8080
-replicas: 2
-imagePullSecret: regcred
+app:
+  name: auth-provider-ms
+  port: 8080
+  part-of: auth-system
+  replicas: 2
+  metrics:
+    path: /metrics
+  health-check:
+    liveness:
+      path: /healthz
+      initial-delay-seconds: 5
+    readiness:
+      path: /readyz
+      initial-delay-seconds: 10
+  resources:
+    limits:
+      memory: 64Mi
+      cpu: 250m
+    requests:
+      memory: 32Mi
+      cpu: 50m
+
+namespace: matiasmartin-labs
+
+network:
+  host: auth-provider-ms.raspisrv.local
+
+mounts:
+  - name: jwt-keys-volume
+    mount-path: /etc/keys
+    read-only: true
+
+secret-volumes:
+  - name: jwt-keys-volume
+    default-mode: 420
+    secret-name: jwt-keys
+
 env:
-  - name: PORT
-    value: "8080"
-  - name: GIN_MODE
-    value: release
+  secrets:
+    - auth-provider-ms-credentials
