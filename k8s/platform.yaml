@@ -24,3 +24,7 @@ namespace: matiasmartin-labs
 
 network:
   host: auth-provider-ms.raspisrv.local
+
+env:
+  secrets:
+    - auth-providers-credentials
