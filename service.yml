@@ -3,10 +3,10 @@ kind: Service
 metadata:
   annotations:
     k8s.renderer/template-version: 1.0.0
-    k8s.renderer/commit: 187a77fcab87196f503b00d964258ca3dc645ea3
+    k8s.renderer/commit: e70caa92ad234cb6b291a923fd4c756902b813cc
     k8s.renderer/branch: refs/heads/main
     k8s.renderer/vcs-url: matiasmartin-labs/auth-provider-ms
-    k8s.renderer/render-time: 2026-05-02T22:59:16Z
+    k8s.renderer/render-time: 2026-05-02T23:11:49Z
   labels:
     app.kubernetes.io/name: auth-provider-ms
     app.kubernetes.io/part-of: auth-system
