@@ -1,0 +1,54 @@
+name: unit-test-analysis
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.go'
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+    paths:
+      - '**/*.go'
+
+jobs:
+  sonar-cloud:
+    name: Run SonarCloud Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Run tests with coverage
+        run: go test ./... -coverprofile=coverage.out
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=com.mmartin:auth-provider-ms
+            -Dsonar.organization=matiasmartin-labs
+            -Dsonar.go.coverage.reportPaths=coverage.out
