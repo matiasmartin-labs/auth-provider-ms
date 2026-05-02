@@ -24,17 +24,3 @@ namespace: matiasmartin-labs
 
 network:
   host: auth-provider-ms.raspisrv.local
-
-mounts:
-  - name: jwt-keys-volume
-    mount-path: /etc/keys
-    read-only: true
-
-secret-volumes:
-  - name: jwt-keys-volume
-    default-mode: 420
-    secret-name: jwt-keys
-
-env:
-  secrets:
-    - auth-provider-ms-credentials
