@@ -1,14 +1,16 @@
 package main
 
 import (
-	"flag"
 	"crypto/rand"
 	"crypto/rsa"
+	"flag"
 	"log"
 	"os"
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
 	fwkviper "github.com/matiasmartin-labs/common-fwk/config/viper"
+	fwkjwt "github.com/matiasmartin-labs/common-fwk/security/jwt"
+	fwkkeys "github.com/matiasmartin-labs/common-fwk/security/keys"
 
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/jwks"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/server"
@@ -32,22 +34,33 @@ func main() {
 	}
 
 	// ---- RSA keypair ----
+	// NOTE: we generate the keypair here (not via UseServerSecurityFromConfig) because
+	// the app needs direct access to the private key to sign tokens and the public key
+	// to expose it via the JWKS endpoint. common-fwk v0.4.0 does not expose the
+	// internally generated RSA keypair when using rs256-key-source: generated.
+	// See: https://github.com/matiasmartin-labs/common-fwk/issues/50
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		log.Fatalf("generate rsa key: %v", err)
 	}
 	keyPair := jwks.NewKeyPair(privateKey)
 
+	// ---- JWT validator ----
+	resolver := fwkkeys.NewRSAResolver(privateKey, keyPair.KeyID)
+	validator, err := fwkjwt.NewValidator(fwkjwt.Options{
+		Methods:  []string{"RS256"},
+		Issuer:   cfg.Security.Auth.JWT.Issuer,
+		Resolver: resolver,
+	})
+	if err != nil {
+		log.Fatalf("create validator: %v", err)
+	}
+
 	// ---- Application ----
 	application := fwkapp.NewApplication().
 		UseConfig(cfg).
-		UseServer()
-
-	// ---- Security (v0.4.0: config-based RS256 wiring) ----
-	application, err = application.UseServerSecurityFromConfig()
-	if err != nil {
-		log.Fatalf("wire security from config: %v", err)
-	}
+		UseServer().
+		UseServerSecurity(validator)
 
 	// ---- Health/Readiness presets (v0.6.0) ----
 	if err := application.EnableHealthReadinessPresets(fwkapp.HealthReadinessOptions{}); err != nil {
