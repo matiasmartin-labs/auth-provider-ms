@@ -8,13 +8,11 @@ server:
 security:
   auth:
     jwt:
-      # algorithm: RS256 wiring via UseServerSecurityFromConfig() is blocked pending
-      # common-fwk exposing the generated RSA keypair for JWKS usage.
-      # JWT security is wired manually in main.go using fwkkeys/fwkjwt directly.
-      # See: https://github.com/matiasmartin-labs/common-fwk/issues/50
+      algorithm: RS256
       issuer: auth-provider-ms
       ttl-minutes: 60
-      secret: ${JWT_SECRET}
+      rs256-key-source: generated
+      rs256-key-id: auth-provider-ms-key
     cookie:
       name: token
       domain: ""

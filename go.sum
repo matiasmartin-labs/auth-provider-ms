@@ -72,6 +72,8 @@ github.com/matiasmartin-labs/common-fwk v0.1.0 h1:pP6B4fV7uXVZ+/1C1I/B84M+n2ycTv
 github.com/matiasmartin-labs/common-fwk v0.1.0/go.mod h1:lZMlKaenV0KFr5kxHfWjH34b5kfApILBF+b0ZnmcF78=
 github.com/matiasmartin-labs/common-fwk v0.7.0 h1:WCwnI7g++0KRsUI63q8d9n54yhIigud66pflylpOWwE=
 github.com/matiasmartin-labs/common-fwk v0.7.0/go.mod h1:lZMlKaenV0KFr5kxHfWjH34b5kfApILBF+b0ZnmcF78=
+github.com/matiasmartin-labs/common-fwk v0.10.0 h1:i4v8XZIrq7ehEhwDcWDzUqIL6MwmyG1Qi7mffuIf7+w=
+github.com/matiasmartin-labs/common-fwk v0.10.0/go.mod h1:lZMlKaenV0KFr5kxHfWjH34b5kfApILBF+b0ZnmcF78=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=

@@ -1,11 +1,11 @@
 meta {
-  name: Ping
+  name: Readyz
   type: http
-  seq: 1
+  seq: 5
 }
 
 get {
-  url: {{auth-provider-url}}/ping
+  url: {{auth-provider-url}}/readyz
   body: none
   auth: inherit
 }
