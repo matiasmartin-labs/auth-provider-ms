@@ -1,0 +1,31 @@
+name: K8s Deploy
+
+on:
+  pull_request:
+    branches:
+      - k8s-manifests
+    types:
+      - closed
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: self-hosted
+    if: github.event.pull_request.merged == true
+
+    steps:
+      - name: Checkout k8s-manifests
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v1.28.1/bin/linux/arm64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Apply manifests
+        run: |
+          for f in *.yml; do kubectl apply -f "$f" -n matiasmartin-labs; done
+
+      - name: Check rollout status
+        run: kubectl rollout status deployment/auth-provider-ms -n matiasmartin-labs --timeout=30s
