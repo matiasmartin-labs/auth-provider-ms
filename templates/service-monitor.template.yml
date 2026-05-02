@@ -1,0 +1,31 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    k8s.renderer/template-version: 1.0.0
+    k8s.renderer/commit: {{ .Vars.CommitSHA }}
+    k8s.renderer/branch: {{ .Vars.Branch }}
+    k8s.renderer/vcs-url: {{ .Vars.VCSURL }}
+    k8s.renderer/render-time: {{ .RenderTime }}
+  labels:
+    app.kubernetes.io/name: {{ .App.Name }}
+    app.kubernetes.io/part-of: {{ .App.PartOf }}
+    app.kubernetes.io/version: {{ .Vars.BuildVersion }}
+    app.kubernetes.io/managed-by: k8s.renderer
+    release: monitoring
+  name: {{ .App.Name }}
+  namespace: {{ .Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .App.Name }}
+      app.kubernetes.io/part-of: {{ .App.PartOf }}
+      app.kubernetes.io/version:  {{ .Vars.BuildVersion }}
+  endpoints:
+    - port: http
+      path: {{ .App.Metrics.Path }}
+      interval: 30s
+      targetPort: {{ .App.Port }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Namespace }}
