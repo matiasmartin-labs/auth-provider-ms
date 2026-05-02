@@ -1,0 +1,26 @@
+app:
+  name: auth-provider-ms
+  port: 8080
+  part-of: auth-system
+  replicas: 2
+  metrics:
+    path: /metrics
+  health-check:
+    liveness:
+      path: /healthz
+      initial-delay-seconds: 5
+    readiness:
+      path: /readyz
+      initial-delay-seconds: 10
+  resources:
+    limits:
+      memory: 64Mi
+      cpu: 250m
+    requests:
+      memory: 32Mi
+      cpu: 50m
+
+namespace: matiasmartin-labs
+
+network:
+  host: auth-provider-ms.raspisrv.local
