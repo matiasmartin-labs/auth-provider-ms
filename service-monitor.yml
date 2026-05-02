@@ -1,0 +1,31 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    k8s.renderer/template-version: 1.0.0
+    k8s.renderer/commit: 8be872b54c8ffd7443050c0c8c151f4f463281df
+    k8s.renderer/branch: refs/heads/main
+    k8s.renderer/vcs-url: matiasmartin-labs/auth-provider-ms
+    k8s.renderer/render-time: 2026-05-02T22:04:22Z
+  labels:
+    app.kubernetes.io/name: auth-provider-ms
+    app.kubernetes.io/part-of: auth-system
+    app.kubernetes.io/version: v1.0.2
+    app.kubernetes.io/managed-by: k8s.renderer
+    release: monitoring
+  name: auth-provider-ms
+  namespace: matiasmartin-labs
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-provider-ms
+      app.kubernetes.io/part-of: auth-system
+      app.kubernetes.io/version:  v1.0.2
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      targetPort: 8080
+  namespaceSelector:
+    matchNames:
+      - matiasmartin-labs

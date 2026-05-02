@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    k8s.renderer/template-version: 1.0.0
+    k8s.renderer/commit: {{ .Vars.CommitSHA }}
+    k8s.renderer/branch: {{ .Vars.Branch }}
+    k8s.renderer/vcs-url: {{ .Vars.VCSURL }}
+    k8s.renderer/render-time: {{ .RenderTime }}
+  labels:
+    app.kubernetes.io/name: {{ .App.Name }}
+    app.kubernetes.io/part-of: {{ .App.PartOf }}
+    app.kubernetes.io/version: {{ .Vars.BuildVersion }}
+    app.kubernetes.io/managed-by: k8s.renderer
+  name: {{ .App.Name }}
+  namespace: matiasmartin-labs
+spec:
+  rules:
+    - host: {{ .Network.Host }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ .App.Name }}
+                port:
+                  name: http
+            path: /
+            pathType: Prefix

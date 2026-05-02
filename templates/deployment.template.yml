@@ -1,0 +1,82 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    k8s.renderer/template-version: 1.0.0
+    k8s.renderer/commit: {{ .Vars.CommitSHA }}
+    k8s.renderer/branch: {{ .Vars.Branch }}
+    k8s.renderer/vcs-url: {{ .Vars.VCSURL }}
+    k8s.renderer/render-time: {{ .RenderTime }}
+  labels:
+    app.kubernetes.io/name: {{ .App.Name }}
+    app.kubernetes.io/part-of: {{ .App.PartOf }}
+    app.kubernetes.io/version: {{ .Vars.BuildVersion }}
+    app.kubernetes.io/managed-by: k8s.renderer
+  name: {{ .App.Name }}
+  namespace: {{ .Namespace }}
+spec:
+  replicas: {{ .App.Replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .App.Name }}
+      app.kubernetes.io/part-of: {{ .App.PartOf }}
+  template:
+    metadata:
+      annotations:
+        k8s.renderer/template-version: 1.0.0
+        k8s.renderer/commit: {{ .Vars.CommitSHA }}
+        k8s.renderer/branch: {{ .Vars.Branch }}
+        k8s.renderer/vcs-url: {{ .Vars.VCSURL }}
+        k8s.renderer/render-time: {{ .RenderTime }}
+      labels:
+        app.kubernetes.io/name: {{ .App.Name }}
+        app.kubernetes.io/part-of: {{ .App.PartOf }}
+        app.kubernetes.io/version: {{ .Vars.BuildVersion }}
+        app.kubernetes.io/managed-by: k8s.renderer
+      namespace: {{ .Namespace }}
+    spec:
+      containers:
+        - image: {{ .Vars.DockerRegistry }}/{{ .App.Name }}:{{ .Vars.BuildVersion }}
+          imagePullPolicy: Always
+          name: {{ .App.Name }}
+          resources:
+            limits:
+              cpu: {{ .App.Resources.Limits.CPU }}
+              memory: {{ .App.Resources.Limits.Memory }}
+            requests:
+              cpu: {{ .App.Resources.Requests.CPU }}
+              memory: {{ .App.Resources.Requests.Memory }}
+          readinessProbe:
+            httpGet:
+              path: {{ .App.HealthCheck.Readiness.Path }}
+              port: {{ .App.Port }}
+            initialDelaySeconds: {{ .App.HealthCheck.Readiness.InitialDelaySeconds }}
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: {{ .App.HealthCheck.Liveness.Path }}
+              port: {{ .App.Port }}
+            initialDelaySeconds: {{ .App.HealthCheck.Liveness.InitialDelaySeconds }}
+            periodSeconds: 5
+            failureThreshold: 3
+          envFrom: {{ range $secret := .Env.Secrets }}
+            - secretRef:
+                name: {{ $secret }} {{ end }}
+          ports:
+            - containerPort: {{ .App.Port }}
+              name: http
+              protocol: TCP
+          volumeMounts: {{ range $mount := .Mounts }}
+            - mountPath: {{ $mount.Path }}
+              name: {{ $mount.Name }}
+              readOnly: {{ $mount.ReadOnly }} {{ end }}
+      imagePullSecrets:
+        - name: {{ .Vars.ImagePullSecret }}
+      volumes: {{ range $secret := .SecretVolumes }}
+        - name: {{ $secret.Name }}
+          secret:
+            defaultMode: {{ $secret.Mode }}
+            optional: false
+            secretName: {{ $secret.SecretName }}  {{ end }}
