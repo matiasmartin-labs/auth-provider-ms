@@ -2,7 +2,7 @@ app:
   name: auth-provider-ms
   port: 8080
   part-of: auth-system
-  replicas: 2
+  replicas: 1
   metrics:
     path: /metrics
   health-check:
