@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: builder
 # ---------------------------------------------------------------------------
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 ARG GOARCH
 ARG GOOS=linux
@@ -19,9 +19,9 @@ COPY . .
 
 # Build a static binary with debug info stripped
 RUN CGO_ENABLED=0 GOOS=${GOOS} go build \
-    -ldflags="-s -w" \
-    -o /app/provider-auth-ms \
-    ./cmd/provider-auth-ms
+  -ldflags="-s -w" \
+  -o /app/provider-auth-ms \
+  ./cmd/provider-auth-ms
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime
