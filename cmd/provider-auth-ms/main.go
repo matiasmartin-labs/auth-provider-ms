@@ -9,8 +9,6 @@ import (
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
 	fwkviper "github.com/matiasmartin-labs/common-fwk/config/viper"
-	fwkjwt "github.com/matiasmartin-labs/common-fwk/security/jwt"
-	fwkkeys "github.com/matiasmartin-labs/common-fwk/security/keys"
 
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/jwks"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/server"
@@ -40,15 +38,26 @@ func main() {
 	}
 	keyPair := jwks.NewKeyPair(privateKey)
 
-	// ---- JWT validator ----
-	resolver := fwkkeys.NewRSAResolver(privateKey, keyPair.KeyID)
-	validator, err := fwkjwt.NewValidator(fwkjwt.Options{
-		Methods:  []string{"RS256"},
-		Issuer:   cfg.Security.Auth.JWT.Issuer,
-		Resolver: resolver,
-	})
+	// ---- Application ----
+	application := fwkapp.NewApplication().
+		UseConfig(cfg).
+		UseServer()
+
+	// ---- Security (v0.4.0: config-based RS256 wiring) ----
+	application, err = application.UseServerSecurityFromConfig()
 	if err != nil {
-		log.Fatalf("create validator: %v", err)
+		log.Fatalf("wire security from config: %v", err)
+	}
+
+	// ---- Health/Readiness presets (v0.6.0) ----
+	if err := application.EnableHealthReadinessPresets(fwkapp.HealthReadinessOptions{}); err != nil {
+		log.Fatalf("enable health/readiness: %v", err)
+	}
+
+	// ---- Logger (v0.7.0) ----
+	logger, err := application.GetLogger("auth")
+	if err != nil {
+		log.Fatalf("get logger: %v", err)
 	}
 
 	// ---- Bootstrap ----
@@ -56,19 +65,16 @@ func main() {
 		PrivateKey: privateKey,
 		KeyPair:    keyPair,
 		Config:     cfg,
+		Logger:     logger,
 	}
 
-	// ---- Application ----
-	app := fwkapp.NewApplication().
-		UseConfig(cfg).
-		UseServer().
-		UseServerSecurity(validator)
-
-	if err := server.Routes(app, b); err != nil {
+	if err := server.Routes(application, b); err != nil {
 		log.Fatalf("register routes: %v", err)
 	}
 
-	if err := app.Run(); err != nil {
+	logger.Infof("starting auth-provider-ms on port %d", cfg.Server.Port)
+
+	if err := application.Run(); err != nil {
 		log.Fatalf("run: %v", err)
 	}
 }

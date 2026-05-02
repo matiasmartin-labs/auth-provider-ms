@@ -7,6 +7,7 @@ import (
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
 	fwkconfig "github.com/matiasmartin-labs/common-fwk/config"
+	fwklogging "github.com/matiasmartin-labs/common-fwk/logging"
 	"golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
 
@@ -25,11 +26,13 @@ type Bootstrap struct {
 	PrivateKey *rsa.PrivateKey
 	KeyPair    *jwks.KeyPair
 	Config     fwkconfig.Config
+	Logger     fwklogging.Logger
 }
 
 // Routes wires all HTTP routes onto the application using the provided bootstrap.
 func Routes(app *fwkapp.Application, b *Bootstrap) error {
-	cfg := b.Config
+	// v0.5.0: use GetConfig() read-only accessor for runtime config snapshot
+	cfg := app.GetConfig()
 	googleProvider := cfg.Security.Auth.OAuth2.Providers["google"]
 	cookieCfg := cfg.Security.Auth.Cookie
 	jwtCfg := cfg.Security.Auth.JWT
