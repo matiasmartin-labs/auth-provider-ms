@@ -1,0 +1,25 @@
+# Version control
+.git/
+
+# Documentation — not needed in the image
+*.md
+
+# Test artifacts
+coverage.out
+test-results.json
+
+# Editor config
+.vscode/
+
+# API client collection
+bruno/
+
+# Kubernetes manifests — not part of the build
+k8s/
+
+# SDD / OpenSpec artifacts
+openspec/
+.atl/
+
+# Temporary files
+tmp/
