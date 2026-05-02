@@ -1,0 +1,95 @@
+name: Build and Promote
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build and promote (e.g. v1.2.3)'
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/matiasmartin-labs/auth-provider-ms
+
+jobs:
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "VERSION=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+          platforms: linux/arm64
+
+  promote:
+    name: Promote K8s Manifests
+    runs-on: ubuntu-24.04-arm
+    needs: build
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "VERSION=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Render K8s manifests
+        uses: matiasmartin-labs/gha-deployments/k8s-renderer@main
+        with:
+          input-dir: ./k8s
+          output-dir: ./k8s/manifests
+          version: ${{ steps.version.outputs.VERSION }}
+          docker-registry: ghcr.io/matiasmartin-labs
+          image-pull-secret: regcred
+          branch: ${{ github.ref }}
+      - name: Promote manifests to k8s-manifests branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          BRANCH="deploy-pr-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin k8s-manifests
+          git checkout -b "$BRANCH" origin/k8s-manifests
+          cp -r ./k8s/manifests/* .
+          git add .
+          git diff --cached --quiet || git commit -m "chore(k8s): promote manifests for ${VERSION}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore(k8s): promote manifests for ${VERSION}" \
+            --body "Automated manifest promotion for release ${VERSION}" \
+            --base k8s-manifests \
+            --head "$BRANCH"

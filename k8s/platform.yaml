@@ -1,0 +1,10 @@
+name: auth-provider-ms
+image: ghcr.io/matiasmartin-labs/auth-provider-ms
+port: 8080
+replicas: 2
+imagePullSecret: regcred
+env:
+  - name: PORT
+    value: "8080"
+  - name: GIN_MODE
+    value: release
