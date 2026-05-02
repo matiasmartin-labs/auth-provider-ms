@@ -72,24 +72,40 @@ jobs:
           output-dir: ./k8s/manifests
           version: ${{ steps.version.outputs.VERSION }}
           docker-registry: ghcr.io/matiasmartin-labs
-          image-pull-secret: regcred
+          image-pull-secret: ghcr-secret
           branch: ${{ github.ref }}
-      - name: Promote manifests to k8s-manifests branch
+
+      - name: Git Config
+        run: |
+          git config --global user.name "Action"
+          git config --global user.email "action@github.com"
+
+      - name: Checkout k8s-manifests branch
+        run: |
+          git fetch origin k8s-manifests
+          git switch k8s-manifests
+          
+          git checkout -b "deploy-pr-${{ steps.version.outputs.VERSION }}"
+
+      - name: Move manifests to root directory
+        run: |
+          mv ./k8s/manifests/* ./
+          rm -r ./k8s
+
+      - name: Commit and Push manifests
+        run: |
+          git add ./*.yml
+          git commit -m "Promote Kubernetes manifests for version ${{ steps.version.outputs.VERSION }}"
+          git push origin "deploy-pr-${{ steps.version.outputs.VERSION }}"
+
+      - name: Create a PR for the manifests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          BRANCH="deploy-pr-${VERSION}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin k8s-manifests
-          git checkout -b "$BRANCH" origin/k8s-manifests
-          cp -r ./k8s/manifests/* .
-          git add .
-          git diff --cached --quiet || git commit -m "chore(k8s): promote manifests for ${VERSION}"
-          git push origin "$BRANCH"
           gh pr create \
-            --title "chore(k8s): promote manifests for ${VERSION}" \
-            --body "Automated manifest promotion for release ${VERSION}" \
+            --title "Promote Kubernetes Manifests for version ${{ steps.version.outputs.VERSION }}" \
+            --body "This PR adds Kubernetes manifests for version ${{ steps.version.outputs.VERSION }}." \
             --base k8s-manifests \
-            --head "$BRANCH"
+            --head "deploy-pr-${{ steps.version.outputs.VERSION }}" \
+            --repo ${{ github.repository }}
+
