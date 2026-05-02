@@ -25,15 +25,23 @@ func NewKeyPair(privateKey *rsa.PrivateKey) *KeyPair {
 }
 
 // NewJwksHandler returns a Gin handler that serves the RSA public key as a JWKS JSON response.
+//
+// Deprecated: prefer NewJwksHandlerFromPublicKey, which accepts the public key and
+// key ID directly so that KeyPair is no longer required.
 func NewJwksHandler(kp *KeyPair) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		pub := &kp.PrivateKey.PublicKey
+	return NewJwksHandlerFromPublicKey(&kp.PrivateKey.PublicKey, kp.KeyID)
+}
 
+// NewJwksHandlerFromPublicKey returns a Gin handler that serves pub as a JWKS JSON response
+// identified by keyID. Use this variant together with app.GetRSAPublicKey() and app.GetRSAKeyID()
+// so that the local KeyPair wrapper is not needed.
+func NewJwksHandlerFromPublicKey(pub *rsa.PublicKey, keyID string) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
 		ctx.JSON(200, gin.H{
 			"keys": []gin.H{
 				{
 					"kty": "RSA",
-					"kid": kp.KeyID,
+					"kid": keyID,
 					"use": "sig",
 					"alg": "RS256",
 					"n":   base64URLEncode(pub.N),

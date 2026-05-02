@@ -2,17 +2,12 @@ package main
 
 import (
 	"flag"
-	"crypto/rand"
-	"crypto/rsa"
 	"log"
 	"os"
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
 	fwkviper "github.com/matiasmartin-labs/common-fwk/config/viper"
-	fwkjwt "github.com/matiasmartin-labs/common-fwk/security/jwt"
-	fwkkeys "github.com/matiasmartin-labs/common-fwk/security/keys"
 
-	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/jwks"
 	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/server"
 )
 
@@ -33,42 +28,36 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	// ---- RSA keypair ----
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		log.Fatalf("generate rsa key: %v", err)
-	}
-	keyPair := jwks.NewKeyPair(privateKey)
-
-	// ---- JWT validator ----
-	resolver := fwkkeys.NewRSAResolver(privateKey, keyPair.KeyID)
-	validator, err := fwkjwt.NewValidator(fwkjwt.Options{
-		Methods:  []string{"RS256"},
-		Issuer:   cfg.Security.Auth.JWT.Issuer,
-		Resolver: resolver,
-	})
-	if err != nil {
-		log.Fatalf("create validator: %v", err)
-	}
-
-	// ---- Bootstrap ----
-	b := &server.Bootstrap{
-		PrivateKey: privateKey,
-		KeyPair:    keyPair,
-		Config:     cfg,
-	}
-
 	// ---- Application ----
-	app := fwkapp.NewApplication().
+	application := fwkapp.NewApplication().
 		UseConfig(cfg).
-		UseServer().
-		UseServerSecurity(validator)
+		UseServer()
 
-	if err := server.Routes(app, b); err != nil {
+	// ---- Security (v0.9.0: config-based RS256 wiring, exposes GetRSAPrivateKey) ----
+	application, err = application.UseServerSecurityFromConfig()
+	if err != nil {
+		log.Fatalf("wire security from config: %v", err)
+	}
+
+	// ---- Health/Readiness presets ----
+	if err := application.EnableHealthReadinessPresets(fwkapp.HealthReadinessOptions{}); err != nil {
+		log.Fatalf("enable health/readiness: %v", err)
+	}
+
+	// ---- Logger ----
+	logger, err := application.GetLogger("auth")
+	if err != nil {
+		log.Fatalf("get logger: %v", err)
+	}
+
+	// ---- Routes ----
+	if err := server.Routes(application); err != nil {
 		log.Fatalf("register routes: %v", err)
 	}
 
-	if err := app.Run(); err != nil {
+	logger.Infof("starting auth-provider-ms on port %d", cfg.Server.Port)
+
+	if err := application.Run(); err != nil {
 		log.Fatalf("run: %v", err)
 	}
 }

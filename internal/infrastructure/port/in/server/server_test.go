@@ -1,40 +1,44 @@
 package server
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
 	fwkconfig "github.com/matiasmartin-labs/common-fwk/config"
-	fwkjwt "github.com/matiasmartin-labs/common-fwk/security/jwt"
-	fwkkeys "github.com/matiasmartin-labs/common-fwk/security/keys"
-	"github.com/matiasmartin-labs/auth-provider-ms/internal/infrastructure/port/in/jwks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestBootstrap(t *testing.T) (*fwkapp.Application, *Bootstrap) {
+// newTestApp builds a fully wired Application for route tests using RS256 with
+// generated keys, mirroring the production config path.
+func newTestApp(t *testing.T) *fwkapp.Application {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-
-	keyPair := jwks.NewKeyPair(privateKey)
-
 	cfg := fwkconfig.Config{
-		Server: fwkconfig.ServerConfig{Host: "127.0.0.1", Port: 8080},
+		Server: fwkconfig.ServerConfig{
+			Host:           "127.0.0.1",
+			Port:           8080,
+			ReadTimeout:    10 * time.Second,
+			WriteTimeout:   10 * time.Second,
+			MaxHeaderBytes: 1 << 20,
+		},
 		Security: fwkconfig.SecurityConfig{
 			Auth: fwkconfig.AuthConfig{
 				JWT: fwkconfig.JWTConfig{
+					Algorithm:  "RS256",
 					Issuer:     "test-issuer",
 					TTLMinutes: 60,
+					RS256: fwkconfig.RS256Config{
+						KeySource: fwkconfig.RS256KeySourceGenerated,
+						KeyID:     "test-key",
+					},
 				},
 				Cookie: fwkconfig.CookieConfig{
 					Name:     "token",
@@ -48,6 +52,8 @@ func newTestBootstrap(t *testing.T) (*fwkapp.Application, *Bootstrap) {
 							ClientID:     "test-client-id",
 							ClientSecret: "test-secret",
 							RedirectURL:  "http://localhost:8080/callback",
+							AuthURL:      "https://accounts.google.com/o/oauth2/auth",
+							TokenURL:     "https://oauth2.googleapis.com/token",
 							Scopes:       []string{"email", "profile"},
 						},
 					},
@@ -59,35 +65,21 @@ func newTestBootstrap(t *testing.T) (*fwkapp.Application, *Bootstrap) {
 		},
 	}
 
-	resolver := fwkkeys.NewRSAResolver(privateKey, keyPair.KeyID)
-	validator, err := fwkjwt.NewValidator(fwkjwt.Options{
-		Methods:  []string{"RS256"},
-		Issuer:   "test-issuer",
-		Resolver: resolver,
-	})
-	require.NoError(t, err)
-
-	b := &Bootstrap{
-		PrivateKey: privateKey,
-		KeyPair:    keyPair,
-		Config:     cfg,
-	}
-
-	app := fwkapp.NewApplication().
+	app, err := fwkapp.NewApplication().
 		UseConfig(cfg).
 		UseServer().
-		UseServerSecurity(validator)
+		UseServerSecurityFromConfig()
+	require.NoError(t, err)
 
-	return app, b
+	return app
 }
 
 func TestRoutes_RegistersSignOutEndpoint(t *testing.T) {
-	app, b := newTestBootstrap(t)
+	app := newTestApp(t)
 
-	err := Routes(app, b)
+	err := Routes(app)
 	require.NoError(t, err)
 
-	// Use a test listener so we can exercise the actual handler via RunListener.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
@@ -105,9 +97,9 @@ func TestRoutes_RegistersSignOutEndpoint(t *testing.T) {
 }
 
 func TestRoutes_RegistersJWKSEndpoint(t *testing.T) {
-	app, b := newTestBootstrap(t)
+	app := newTestApp(t)
 
-	err := Routes(app, b)
+	err := Routes(app)
 	require.NoError(t, err)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -127,42 +119,31 @@ func TestRoutes_RegistersJWKSEndpoint(t *testing.T) {
 func TestRoutes_ReturnsError_WhenServerNotReady(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-
-	b := &Bootstrap{
-		PrivateKey: privateKey,
-		KeyPair:    jwks.NewKeyPair(privateKey),
-		Config:     fwkconfig.Config{},
-	}
-
 	// Application without UseServer() — server not ready.
 	app := fwkapp.NewApplication()
 
-	err = Routes(app, b)
+	err := Routes(app)
 	assert.Error(t, err)
 }
 
-// httpRecorder creates a single-request test server without the net/http/httptest.Server overhead.
-func httpRecorder(t *testing.T, app *fwkapp.Application, b *Bootstrap, method, path string) *httptest.ResponseRecorder {
+// httpRecorder creates a single-request test server and returns a recorder with the response code.
+func httpRecorder(t *testing.T, app *fwkapp.Application, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	err := Routes(app, b)
+	err := Routes(app)
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
 
-	// Launch a test listener to exercise the actual routes.
 	ln, lnErr := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, lnErr)
 	go func() { _ = app.RunListener(ln) }()
 	t.Cleanup(func() { _ = ln.Close() })
 
-	resp, err := http.NewRequest(method, "http://"+ln.Addr().String()+path, nil)
+	req, err := http.NewRequest(method, "http://"+ln.Addr().String()+path, nil)
 	require.NoError(t, err)
 
-	client := &http.Client{}
-	httpResp, err := client.Do(resp)
+	httpResp, err := (&http.Client{}).Do(req)
 	require.NoError(t, err)
 	defer httpResp.Body.Close()
 
@@ -172,7 +153,7 @@ func httpRecorder(t *testing.T, app *fwkapp.Application, b *Bootstrap, method, p
 }
 
 func TestRoutes_RegistersGoogleLoginEndpoint(t *testing.T) {
-	app, b := newTestBootstrap(t)
-	w := httpRecorder(t, app, b, http.MethodGet, "/oauth2/authorization/google")
+	app := newTestApp(t)
+	w := httpRecorder(t, app, http.MethodGet, "/oauth2/authorization/google")
 	assert.NotEqual(t, http.StatusNotFound, w.Code)
 }

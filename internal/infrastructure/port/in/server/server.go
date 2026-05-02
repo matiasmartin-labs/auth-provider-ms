@@ -1,12 +1,10 @@
 package server
 
 import (
-	"crypto/rsa"
 	"strings"
 	"time"
 
 	fwkapp "github.com/matiasmartin-labs/common-fwk/app"
-	fwkconfig "github.com/matiasmartin-labs/common-fwk/config"
 	"golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
 
@@ -20,16 +18,10 @@ import (
 
 const googleUserInfoURI = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-// Bootstrap holds the runtime dependencies resolved at startup.
-type Bootstrap struct {
-	PrivateKey *rsa.PrivateKey
-	KeyPair    *jwks.KeyPair
-	Config     fwkconfig.Config
-}
-
-// Routes wires all HTTP routes onto the application using the provided bootstrap.
-func Routes(app *fwkapp.Application, b *Bootstrap) error {
-	cfg := b.Config
+// Routes wires all HTTP routes onto the application.
+// All runtime dependencies are resolved directly from app.Application.
+func Routes(app *fwkapp.Application) error {
+	cfg := app.GetConfig()
 	googleProvider := cfg.Security.Auth.OAuth2.Providers["google"]
 	cookieCfg := cfg.Security.Auth.Cookie
 	jwtCfg := cfg.Security.Auth.JWT
@@ -44,8 +36,9 @@ func Routes(app *fwkapp.Application, b *Bootstrap) error {
 
 	allowedEmails := resolveAllowedEmails(cfg.Security.Auth.Login.Email)
 
+	// v0.9.0: private key retrieved from Application — no manual keypair needed
 	tokenGen := token.NewJwtGenerator(token.JwtGeneratorConfig{
-		PrivateKey:     b.PrivateKey,
+		PrivateKey:     app.GetRSAPrivateKey(),
 		Issuer:         jwtCfg.Issuer,
 		Audience:       "auth-provider-clients",
 		ExpirationTime: time.Duration(jwtCfg.TTLMinutes) * time.Minute,
@@ -58,7 +51,7 @@ func Routes(app *fwkapp.Application, b *Bootstrap) error {
 		tokenGen,
 		googlein.GoogleOAuth2Config{
 			OAuth2Config:    oauth2Config,
-			State:           resolveState(googleProvider),
+			State:           "",
 			CookieName:      cookieCfg.Name,
 			CookieMaxAge:    0,
 			CookieSecure:    cookieCfg.Secure,
@@ -68,7 +61,8 @@ func Routes(app *fwkapp.Application, b *Bootstrap) error {
 		},
 	)
 
-	if err := app.RegisterGET("/.well-known/jwks.json", jwks.NewJwksHandler(b.KeyPair)); err != nil {
+	// v0.10.0: public key and key ID retrieved from Application — no jwks.KeyPair needed
+	if err := app.RegisterGET("/.well-known/jwks.json", jwks.NewJwksHandlerFromPublicKey(app.GetRSAPublicKey(), app.GetRSAKeyID())); err != nil {
 		return err
 	}
 	if err := app.RegisterGET("/login/oauth2/code/google", googleHandler.GoogleCallbackHandler); err != nil {
@@ -107,10 +101,4 @@ func resolveAllowedEmails(raw string) []string {
 	}
 
 	return out
-}
-
-// resolveState reads the OAuth2 state from the provider config.
-// common-fwk does not model state directly; fall back to empty string.
-func resolveState(_ fwkconfig.OAuth2ProviderConfig) string {
-	return ""
 }

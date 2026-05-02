@@ -1,29 +1,42 @@
 server:
   host: ""
   port: 8080
+  read-timeout: 10s
+  write-timeout: 10s
+  max-header-bytes: 1048576
 
 security:
   auth:
     jwt:
-      secret: ${JWT_SECRET}
+      algorithm: RS256
       issuer: auth-provider-ms
-      ttlMinutes: 60
+      ttl-minutes: 60
+      rs256-key-source: generated
+      rs256-key-id: auth-provider-ms-key
     cookie:
       name: token
       domain: ""
       secure: false
-      httpOnly: true
-      sameSite: Strict
+      http-only: true
+      same-site: Strict
     login:
       email: ${ALLOWED_EMAILS}
     oauth2:
       providers:
         google:
-          clientID: ${GOOGLE_CLIENT_ID}
-          clientSecret: ${GOOGLE_CLIENT_SECRET}
-          authURL: https://accounts.google.com/o/oauth2/auth
-          tokenURL: https://oauth2.googleapis.com/token
-          redirectURL: http://localhost:8080/login/oauth2/code/google
+          client-id: ${GOOGLE_CLIENT_ID}
+          client-secret: ${GOOGLE_CLIENT_SECRET}
+          auth-url: https://accounts.google.com/o/oauth2/auth
+          token-url: https://oauth2.googleapis.com/token
+          redirect-url: http://localhost:8080/login/oauth2/code/google
           scopes:
             - https://www.googleapis.com/auth/userinfo.email
             - https://www.googleapis.com/auth/userinfo.profile
+
+logging:
+  enabled: true
+  level: info
+  format: json
+  loggers:
+    auth:
+      level: debug
